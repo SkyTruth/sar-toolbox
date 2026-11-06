@@ -19,8 +19,10 @@ from utils.variables import (
     ALOS2_DESTRIPE_COMB_PERIODS,
     ALOS2_DESTRIPE_DECIMATION,
     ALOS2_DESTRIPE_MAX_GAIN,
+    ALOS2_DESTRIPE_MIN_OCEAN,
     ALOS2_DESTRIPE_PERIOD_KM,
     ALOS2_DESTRIPE_STRIP_PX,
+    ALOS2_MASK_OCEAN,
 )
 
 
@@ -81,10 +83,14 @@ def burst_period(profiles: np.ndarray, pixel_m: float) -> float:
     return float(1 / freq[search][power.argmax()])
 
 
-def burst_stripes(db: np.ndarray, pixel_m: float) -> np.ndarray:
+def burst_stripes(
+    db: np.ndarray, pixel_m: float, ocean: np.ndarray | None = None
+) -> np.ndarray:
     """
     Stripe pattern (dB) of a downsampled whole-scene dB array (NaN = nodata), on the same grid.
     Subtracting it in dB (dividing by 10**(stripes / 10) in linear power) removes the stripes.
+    With ocean (JAXA's ocean flag on the same grid), the steps and arches across the swath, where
+    the beams meet, are included too.
     """
     valid = np.isfinite(db)
     # Edge pixels mix data with nodata when downsampled
@@ -179,6 +185,25 @@ def burst_stripes(db: np.ndarray, pixel_m: float) -> np.ndarray:
     gain = np.where(enough, num / np.maximum(den, 1e-6), 1.0)
     grid *= np.clip(gain, 0, ALOS2_DESTRIPE_MAX_GAIN)
 
+    # Across the swath: the steps where the beams meet, and the arch within each beam (strongest in
+    # HV). They're what the ocean's median along each range line has on top of a smooth trend; the
+    # trend, the real fall-off with incidence angle, stays. Only range lines that are mostly ocean
+    # count, since water near shore alone isn't typical of the whole line.
+    if ocean is not None:
+        sea = ndi.map_coordinates(ocean.astype("float32"), scene_coords, order=1) > 0.99
+        sea &= np.isfinite(rot)
+        with warnings.catch_warnings(action="ignore", category=RuntimeWarning):
+            profile = np.nanmedian(np.where(sea, rot, np.nan), axis=0)
+        n_sea = sea.sum(axis=0)
+        ok = (n_sea > 0) & (
+            n_sea >= ALOS2_DESTRIPE_MIN_OCEAN * np.isfinite(rot).sum(axis=0)
+        )
+        if ok.sum() > 10:
+            x = np.linspace(0, 1, len(profile))
+            trend = np.polyval(np.polyfit(x[ok], profile[ok], 3), x)
+            # Range lines that aren't mostly ocean take the nearest ocean line's value
+            grid += np.interp(x, x[ok], (profile - trend)[ok])[None, :]
+
     # Back onto the scene grid; 0 (no correction) outside the swath
     rows, cols = np.indices(db.shape, dtype="float32")
     out = ndi.map_coordinates(grid, to_grid(rows, cols), order=1, cval=0)
@@ -186,11 +211,12 @@ def burst_stripes(db: np.ndarray, pixel_m: float) -> np.ndarray:
     return out.astype("float32")
 
 
-def scene_stripes(src) -> np.ndarray:
+def scene_stripes(src, msk=None) -> np.ndarray:
     """
     Stripe pattern (dB) of a whole L2.2 scene (an open DN GeoTIFF), on the scene grid downsampled by
     ALOS2_DESTRIPE_DECIMATION. Always the whole scene, even for a crop: a crop is too short along
-    track, and may not reach the swath edges, to estimate the stripes from.
+    track, and may not reach the swath edges, to estimate the stripes from. msk is the scene's open
+    _MSK.tif, whose ocean flag the stripes across the swath are measured on (without it, they're left).
     """
     shape = (
         src.height // ALOS2_DESTRIPE_DECIMATION,
@@ -200,8 +226,12 @@ def scene_stripes(src) -> np.ndarray:
     # dB up to the calibration constant, which doesn't change the stripe pattern; DN 0 is nodata
     with np.errstate(divide="ignore"):
         db = np.where(dn > 0, 20 * np.log10(dn), np.nan)
+    ocean = None
+    if msk is not None:
+        flags = msk.read(1, out_shape=shape, resampling=Resampling.nearest)
+        ocean = flags == ALOS2_MASK_OCEAN
     pixel_m = abs(src.transform.a) * src.width / shape[1]
-    return burst_stripes(db, pixel_m)
+    return burst_stripes(db, pixel_m, ocean)
 
 
 def _lerp(a: np.ndarray, coords: np.ndarray, axis: int) -> np.ndarray:

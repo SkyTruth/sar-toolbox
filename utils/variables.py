@@ -128,6 +128,7 @@ ALOS2_CAL_DB = -83.0  # gamma0 dB = 10*log10(DN^2) - 83
 ALOS2_MODES = ["WBD", "WWD", "WBS", "WWS", "VBD"]
 ALOS2_HH_ONLY_MODES = {"WBS", "WWS"}
 ALOS2_MASK_DROP = (2, 3, 5)  # MSK values: 2 layover, 3 shadow, 5 invalid
+ALOS2_MASK_OCEAN = 4  # MSK value for ocean water
 ALOS2_ATTRIBUTION = "©JAXA"
 # L2.2 GeoTIFF pixel size
 ALOS2_PIXEL_SIZE_M = 25
@@ -150,3 +151,5 @@ ALOS2_DESTRIPE_PERIOD_KM = (2, 15)
 ALOS2_DESTRIPE_COMB_PERIODS = 3
 # The stripes' local strength is fitted as a multiple of that estimate, capped at this
 ALOS2_DESTRIPE_MAX_GAIN = 3
+# The steps across the swath are measured only on range lines with at least this share of ocean
+ALOS2_DESTRIPE_MIN_OCEAN = 0.5

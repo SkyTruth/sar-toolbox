@@ -21,6 +21,8 @@ from utils.variables import (
     ALOS2_GEOTIFF_PATH,
     ALOS2_MASK_DROP,
     ALOS2_TIF_PATH,
+    JAXA_L22_BUCKET_URL,
+    JAXA_L22_PREFIX,
 )
 
 # e.g. ALOS2585563700-250327_WBDR2.2GUD_HH_SLP -> scene ID, polarization
@@ -151,7 +153,20 @@ def convert_scene_to_geotiff(
             # Reproject only when asked for a CRS other than the scene's own
             warp = dst_crs is not None and CRS.from_user_input(dst_crs) != src.crs
 
-            stripes = scene_stripes(src) if destripe else None
+            stripes = None
+            if destripe:
+                # The ocean flag the steps across the swath are measured on: the local mask if
+                # there is one, otherwise read from JAXA (~1 MB)
+                msk_source = (
+                    mask_path
+                    if mask_path.exists()
+                    else f"/vsicurl/{JAXA_L22_BUCKET_URL}/{JAXA_L22_PREFIX}{scene_id}_MSK.tif"
+                )
+                with (
+                    rasterio.Env(**REMOTE_GDAL_ENV),
+                    rasterio.open(msk_source) as ocean_msk,
+                ):
+                    stripes = scene_stripes(src, ocean_msk)
 
             with rasterio.open(
                 native if warp else part,
