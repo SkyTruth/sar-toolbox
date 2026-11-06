@@ -18,6 +18,7 @@ from utils.variables import (
     ALOS2_DESTRIPE_CLIP_DB,
     ALOS2_DESTRIPE_COMB_PERIODS,
     ALOS2_DESTRIPE_DECIMATION,
+    ALOS2_DESTRIPE_MAX_GAIN,
     ALOS2_DESTRIPE_PERIOD_KM,
     ALOS2_DESTRIPE_STRIP_PX,
 )
@@ -96,41 +97,58 @@ def burst_stripes(db: np.ndarray, pixel_m: float) -> np.ndarray:
     inside = ndi.map_coordinates(valid.astype("float32"), scene_coords, order=1, cval=0)
     rot[inside < 0.99] = np.nan
 
-    # Each column is now a range line; flatten it to its median, and leave slicks, ships and land out
+    # Each column is now a range line; flatten it to its median (removes the steps between beams)
     # Columns and strips outside the swath are all NaN; nanmedian warns about each one
     with warnings.catch_warnings(action="ignore", category=RuntimeWarning):
         rel = rot - np.nanmedian(rot, axis=0, keepdims=True)
-    masked = np.where(np.abs(rel) > ALOS2_DESTRIPE_CLIP_DB, np.nan, rel)
 
-    # Along-track median profile of each range strip. Rows where the strip is mostly masked
-    # (land, big slicks) are left as gaps, so a few edge pixels can't pass for a stripe.
+    # Narrow range strips, and where each column sits between their centers
     strip = ALOS2_DESTRIPE_STRIP_PX
-    starts = np.arange(0, masked.shape[1], strip)
-    profiles, centers = [], []
-    for s in starts:
-        block = masked[:, s : s + strip]
-        with warnings.catch_warnings(action="ignore", category=RuntimeWarning):
-            profile = np.nanmedian(block, axis=1)
-        profile[np.isfinite(block).mean(axis=1) < 0.5] = np.nan
-        if np.isfinite(profile).sum() > 1:
-            profiles.append(profile)
-            centers.append(s + block.shape[1] / 2 - 0.5)
-    profiles = np.stack(profiles, axis=1)
-    # Gaps bridged linearly, only for the period search and the running median
-    rows = np.arange(len(profiles))
-    filled = np.stack(
-        [np.interp(rows, rows[np.isfinite(p)], p[np.isfinite(p)]) for p in profiles.T],
-        axis=1,
-    )
+    starts = np.arange(0, rel.shape[1], strip)
+    centers = starts + np.minimum(strip, rel.shape[1] - starts) / 2 - 0.5
+    strip_pos = np.interp(np.arange(rel.shape[1]), centers, np.arange(len(starts)))
+    rows = np.arange(rel.shape[0])
 
-    period = burst_period(filled, pixel_m)
+    def strip_profiles(a):
+        """Along-track median of each strip; rows where the strip is mostly NaN are gaps."""
+        profiles = []
+        for s in starts:
+            block = a[:, s : s + strip]
+            with warnings.catch_warnings(action="ignore", category=RuntimeWarning):
+                profile = np.nanmedian(block, axis=1)
+            profile[np.isfinite(block).mean(axis=1) < 0.5] = np.nan
+            profiles.append(profile)
+        return np.stack(profiles, axis=1)
+
+    def bridged(profiles):
+        """Gaps bridged linearly (all-gap strips set to 0), for filtering."""
+        out = np.zeros_like(profiles)
+        for j, p in enumerate(profiles.T):
+            ok = np.isfinite(p)
+            if ok.sum() > 1:
+                out[:, j] = np.interp(rows, rows[ok], p[ok])
+        return out
+
+    # First pass, nothing left out: the burst period, and each strip's local background
+    # (a running median over two burst periods)
+    first = bridged(strip_profiles(rel))
+    period = burst_period(first, pixel_m)
     print(
         f"    Destripe: track {np.degrees(angle):.1f} deg from columns, "
         f"burst period {period * pixel_m / 1000:.1f} km"
     )
+    window = (int(2 * period) | 1, 1)
+    background = _lerp(
+        ndi.median_filter(first, size=window, mode="nearest"), strip_pos, axis=1
+    )
+
+    # Second pass: leave out pixels far from their local background (slicks, ships, coastlines).
+    # Local, so water that's brighter or darker than the open sea, like shallows, still counts.
+    masked = np.where(np.abs(rel - background) > ALOS2_DESTRIPE_CLIP_DB, np.nan, rel)
+    profiles = strip_profiles(masked)
     # Short-scale wiggle: what's left after a running median over two burst periods
     wiggle = profiles - ndi.median_filter(
-        filled, size=(int(2 * period) | 1, 1), mode="nearest"
+        bridged(profiles), size=window, mode="nearest"
     )
     # Stripes repeat every burst period and real features don't, so the stripe at each row is the
     # median of the wiggle at that row and the same point in the bursts on either side
@@ -145,8 +163,21 @@ def burst_stripes(db: np.ndarray, pixel_m: float) -> np.ndarray:
         stripes = np.nan_to_num(np.nanmedian(shifted, axis=0))
 
     # Interpolate between strip centers across range, so there's no step at each strip edge
-    cols = np.arange(masked.shape[1])
-    grid = _lerp(stripes, np.interp(cols, centers, np.arange(len(centers))), axis=1)
+    grid = _lerp(stripes, strip_pos, axis=1)
+
+    # That's the stripes' shape, but their strength varies from place to place (stronger on brighter
+    # water, as near shore), so scale it to how much of it each neighbourhood actually contains:
+    # a least-squares gain over two burst periods along track and one strip across
+    used = np.isfinite(masked)
+    resid = np.where(used, masked - background, 0)
+    shape = np.where(used, grid, 0)
+    size = (int(2 * period) | 1, strip)
+    num = ndi.uniform_filter(resid * shape, size)
+    den = ndi.uniform_filter(shape * shape, size)
+    # Where too little is left to fit (land, big slicks), keep the shape as estimated
+    enough = ndi.uniform_filter(used.astype("float32"), size) > 0.3
+    gain = np.where(enough, num / np.maximum(den, 1e-6), 1.0)
+    grid *= np.clip(gain, 0, ALOS2_DESTRIPE_MAX_GAIN)
 
     # Back onto the scene grid; 0 (no correction) outside the swath
     rows, cols = np.indices(db.shape, dtype="float32")
