@@ -136,3 +136,15 @@ ALOS2_PIXEL_SIZE_M = 25
 # Timed at ~24 MB/s from JAXA's bucket: remote ~1.3 s + 0.42 s per Mpx vs ~17 s download + 0.18 s per Mpx convert,
 # so they break even near 65 Mpx per file. 50 Mpx (~175 km box at 25 m) leaves margin for faster downloads.
 ALOS2_REMOTE_MAX_PIXELS = 50_000_000
+# Burst destriping (src/alos2_destripe.py). The stripes are estimated on the whole scene downsampled by this
+# factor (100 m), which is plenty for stripes ~5 km apart and keeps the full-scene arrays small.
+ALOS2_DESTRIPE_DECIMATION = 4
+# Pixels further than this from their range line's median (slicks, ships, land) are left out of the estimate
+ALOS2_DESTRIPE_CLIP_DB = 2
+# Width of each range strip the stripes are fitted in, on the downsampled grid (48 px = 4.8 km)
+ALOS2_DESTRIPE_STRIP_PX = 48
+# Along-track range searched for the burst period (5.4 km in WBD scenes)
+ALOS2_DESTRIPE_PERIOD_KM = (2, 15)
+# The stripe at each point is the median over this many bursts either side (plus its own),
+# so features that don't repeat every burst (slicks, coastlines) aren't mistaken for stripes
+ALOS2_DESTRIPE_COMB_PERIODS = 3

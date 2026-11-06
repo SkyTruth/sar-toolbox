@@ -67,6 +67,7 @@ def process_scene(
                         out_dir=args.out_dir,
                         overwrite=args.overwrite,
                         dst_crs=args.crs,
+                        destripe=args.destripe,
                     )
                 )
             # Only reached if every polarization converted
@@ -118,6 +119,11 @@ def main() -> None:
         "--mask",
         action="store_true",
         help="Set layover, shadow and invalid pixels to NaN (downloads each scene's _MSK.tif).",
+    )
+    parser.add_argument(
+        "--destripe",
+        action="store_true",
+        help="Remove the ScanSAR burst stripes, estimated from the whole scene (with --crop, also reads the whole scene at 100 m).",
     )
     parser.add_argument(
         "--crop",
