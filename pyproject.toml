@@ -18,6 +18,7 @@ dependencies = [
     "pyreqwest>=0.12.4",
     "python-dotenv>=1.2.3",
     "rasterio>=1.5.1",
+    "scipy>=1.18.1",
     "tqdm>=4.70.0",
 ]
 

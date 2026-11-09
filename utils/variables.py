@@ -128,6 +128,7 @@ ALOS2_CAL_DB = -83.0  # gamma0 dB = 10*log10(DN^2) - 83
 ALOS2_MODES = ["WBD", "WWD", "WBS", "WWS", "VBD"]
 ALOS2_HH_ONLY_MODES = {"WBS", "WWS"}
 ALOS2_MASK_DROP = (2, 3, 5)  # MSK values: 2 layover, 3 shadow, 5 invalid
+ALOS2_MASK_OCEAN = 4  # MSK value for ocean water
 ALOS2_ATTRIBUTION = "©JAXA"
 # L2.2 GeoTIFF pixel size
 ALOS2_PIXEL_SIZE_M = 25
@@ -136,3 +137,20 @@ ALOS2_PIXEL_SIZE_M = 25
 # Timed at ~24 MB/s from JAXA's bucket: remote ~1.3 s + 0.42 s per Mpx vs ~17 s download + 0.18 s per Mpx convert,
 # so they break even near 65 Mpx per file. 50 Mpx (~175 km box at 25 m) leaves margin for faster downloads.
 ALOS2_REMOTE_MAX_PIXELS = 50_000_000
+# Burst destriping (src/alos2_destripe.py). The stripes are estimated on the whole scene downsampled by this
+# factor (50 m), fine enough to follow the sharp seams between bursts and beams. 4 (100 m) is ~6x faster
+# and uses ~1.5 GB less memory per file, but leaves thin lines along those seams.
+ALOS2_DESTRIPE_DECIMATION = 2
+# Pixels further than this from their local background (slicks, ships, land) are left out of the estimate
+ALOS2_DESTRIPE_CLIP_DB = 4
+# Width of each range strip the stripes are fitted in
+ALOS2_DESTRIPE_STRIP_KM = 4.8
+# Along-track range searched for the burst period (5.4 km in WBD scenes)
+ALOS2_DESTRIPE_PERIOD_KM = (2, 15)
+# The stripe at each point is the median over this many bursts either side (plus its own),
+# so features that don't repeat every burst (slicks, coastlines) aren't mistaken for stripes
+ALOS2_DESTRIPE_COMB_PERIODS = 3
+# The stripes' local strength is fitted as a multiple of that estimate, capped at this
+ALOS2_DESTRIPE_MAX_GAIN = 3
+# The steps across the swath are measured only on range lines with at least this share of ocean
+ALOS2_DESTRIPE_MIN_OCEAN = 0.5

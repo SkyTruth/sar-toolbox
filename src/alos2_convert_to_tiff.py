@@ -12,6 +12,7 @@ from rasterio.warp import transform_bounds
 from rasterio.windows import Window, from_bounds
 from rasterio.windows import transform as window_transform
 
+from src.alos2_destripe import scene_stripes, window_stripes
 from src.nisar_convert_to_tiff import is_url, reproject_tif, to_output
 from utils.geometry import epsg_crs
 from utils.variables import (
@@ -20,6 +21,8 @@ from utils.variables import (
     ALOS2_GEOTIFF_PATH,
     ALOS2_MASK_DROP,
     ALOS2_TIF_PATH,
+    JAXA_L22_BUCKET_URL,
+    JAXA_L22_PREFIX,
 )
 
 # e.g. ALOS2585563700-250327_WBDR2.2GUD_HH_SLP -> scene ID, polarization
@@ -68,12 +71,15 @@ def convert_scene_to_geotiff(
     out_dir: Path | str = ALOS2_GEOTIFF_PATH,
     overwrite: bool = False,
     dst_crs: str | None = None,
+    destripe: bool = False,
 ) -> Path:
     """
     Convert a single, specified PALSAR-2 L2.2 HH/HV GeoTIFF (DN) to a calibrated gamma0 GeoTIFF.
     tif_path can also be a JAXA download URL, read remotely without downloading the whole file
     (worthwhile with a bbox, since only the cropped tiles are fetched). The mask is always a local file.
     dst_crs (e.g. "EPSG:4326") reprojects the output; by default it stays on the scene's UTM grid.
+    destripe removes the ScanSAR burst and beam stripes (see src/alos2_destripe.py); they're estimated
+    from the whole scene at 50 m, so a remote crop also reads the whole scene at that resolution.
     """
 
     remote = is_url(tif_path)
@@ -100,6 +106,8 @@ def convert_scene_to_geotiff(
         suffix += "_dB"
     if mask:
         suffix += "_masked"
+    if destripe:
+        suffix += "_destriped"
     # CRS before the AOI name: the viewer notebook finds crops by the name ending in _<aoi>
     if dst_crs:
         suffix += f"_epsg{CRS.from_user_input(dst_crs).to_epsg()}"
@@ -145,6 +153,21 @@ def convert_scene_to_geotiff(
             # Reproject only when asked for a CRS other than the scene's own
             warp = dst_crs is not None and CRS.from_user_input(dst_crs) != src.crs
 
+            stripes = None
+            if destripe:
+                # The ocean flag the steps across the swath are measured on: the local mask if
+                # there is one, otherwise read from JAXA (~1 MB)
+                msk_source = (
+                    mask_path
+                    if mask_path.exists()
+                    else f"/vsicurl/{JAXA_L22_BUCKET_URL}/{JAXA_L22_PREFIX}{scene_id}_MSK.tif"
+                )
+                with (
+                    rasterio.Env(**REMOTE_GDAL_ENV),
+                    rasterio.open(msk_source) as ocean_msk,
+                ):
+                    stripes = scene_stripes(src, ocean_msk)
+
             with rasterio.open(
                 native if warp else part,
                 "w",
@@ -167,6 +190,10 @@ def convert_scene_to_geotiff(
                     n = min(2048, h - r)
                     read_win = Window(c_off, r_off + r, w, n)
                     block = dn_to_gamma0(src.read(1, window=read_win))
+                    if stripes is not None:
+                        block /= 10 ** (
+                            window_stripes(stripes, src.shape, read_win) / 10
+                        )
                     if msk is not None:
                         block[
                             np.isin(msk.read(1, window=read_win), ALOS2_MASK_DROP)
@@ -183,6 +210,10 @@ def convert_scene_to_geotiff(
                     UNITS="gamma0 (dB)" if db else "gamma0 (linear power)",
                     CALIBRATION="gamma0 = DN^2 * 10^(-8.3)",
                 )
+                if destripe:
+                    dst.update_tags(
+                        DESTRIPED="burst and beam stripes removed (src/alos2_destripe.py)"
+                    )
 
             # reproject_tif copies these tags over; UNITS follows db, so it's right after reprojecting too
             if warp:
@@ -222,6 +253,7 @@ def convert_scenes_to_geotiff(
     out_dir: Path | str = ALOS2_GEOTIFF_PATH,
     overwrite: bool = False,
     dst_crs: str | None = None,
+    destripe: bool = False,
 ) -> list[Path]:
     """
     Convert a list of PALSAR-2 L2.2 tifs to calibrated GeoTIFFs.
@@ -243,6 +275,7 @@ def convert_scenes_to_geotiff(
                     out_dir,
                     overwrite,
                     dst_crs,
+                    destripe,
                 )
             )
 
@@ -288,6 +321,12 @@ def main():
         "--mask",
         action="store_true",
         help="Set layover, shadow and invalid pixels to NaN (needs the scene's _MSK.tif).",
+    )
+    parser.add_argument(
+        "--destripe",
+        action="store_true",
+        help="Remove the ScanSAR burst and beam stripes, estimated from the whole scene at 50 m "
+        "(adds _destriped to the name).",
     )
     parser.add_argument(
         "--bbox",
@@ -345,6 +384,7 @@ def main():
             args.out_dir,
             args.overwrite,
             args.crs,
+            args.destripe,
         )
 
 
