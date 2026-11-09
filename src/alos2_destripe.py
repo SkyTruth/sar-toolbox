@@ -21,7 +21,7 @@ from utils.variables import (
     ALOS2_DESTRIPE_MAX_GAIN,
     ALOS2_DESTRIPE_MIN_OCEAN,
     ALOS2_DESTRIPE_PERIOD_KM,
-    ALOS2_DESTRIPE_STRIP_PX,
+    ALOS2_DESTRIPE_STRIP_KM,
     ALOS2_MASK_OCEAN,
 )
 
@@ -109,7 +109,7 @@ def burst_stripes(
         rel = rot - np.nanmedian(rot, axis=0, keepdims=True)
 
     # Narrow range strips, and where each column sits between their centers
-    strip = ALOS2_DESTRIPE_STRIP_PX
+    strip = round(ALOS2_DESTRIPE_STRIP_KM * 1000 / pixel_m)
     starts = np.arange(0, rel.shape[1], strip)
     centers = starts + np.minimum(strip, rel.shape[1] - starts) / 2 - 0.5
     strip_pos = np.interp(np.arange(rel.shape[1]), centers, np.arange(len(starts)))
@@ -211,17 +211,16 @@ def burst_stripes(
     return out.astype("float32")
 
 
-def scene_stripes(src, msk=None) -> np.ndarray:
+def scene_stripes(
+    src, msk=None, decimation: int = ALOS2_DESTRIPE_DECIMATION
+) -> np.ndarray:
     """
     Stripe pattern (dB) of a whole L2.2 scene (an open DN GeoTIFF), on the scene grid downsampled by
-    ALOS2_DESTRIPE_DECIMATION. Always the whole scene, even for a crop: a crop is too short along
-    track, and may not reach the swath edges, to estimate the stripes from. msk is the scene's open
-    _MSK.tif, whose ocean flag the stripes across the swath are measured on (without it, they're left).
+    decimation. Always the whole scene, even for a crop: a crop is too short along track, and may not
+    reach the swath edges, to estimate the stripes from. msk is the scene's open _MSK.tif, whose
+    ocean flag the stripes across the swath are measured on (without it, they're left).
     """
-    shape = (
-        src.height // ALOS2_DESTRIPE_DECIMATION,
-        src.width // ALOS2_DESTRIPE_DECIMATION,
-    )
+    shape = (src.height // decimation, src.width // decimation)
     dn = src.read(1, out_shape=shape, resampling=Resampling.average).astype("float32")
     # dB up to the calibration constant, which doesn't change the stripe pattern; DN 0 is nodata
     with np.errstate(divide="ignore"):

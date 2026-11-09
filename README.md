@@ -206,7 +206,8 @@ Flags:
     - Can also be declared as `--pol`
 - `--db`: write gamma0 in dB
 - `--mask`: set layover, shadow and invalid pixels to NaN (also downloads each scene's `_MSK.tif`)
-- `--destripe`: removes the ScanSAR burst stripes (horizontal banding, most visible over calm water in the near-range beam). Adds `_destriped` to the file name. The stripes are estimated from the whole scene at 100 m, so with `--crop` the whole scene is also read at that resolution (~10 s more per file).
+- `--destripe`: removes the ScanSAR stripes: the burst banding across the track, and the brightness steps where the five beams meet. Adds `_destriped` to the file name. The stripes are estimated from the whole scene at 100 m, so with `--crop` the whole scene is also read at that resolution (~10 s more per file), along with the scene's `_MSK.tif` (~1 MB), whose ocean flag the beam steps are measured on.
+- `--destripe-fine`: the same, estimated at 50 m, which leaves fainter thin lines at the burst and beam seams. ~6x slower (~90 s per file for a remote crop) and up to ~5 GB of memory per scene, so consider `--workers 2`. Adds `_destriped-fine` to the file name.
 - `--crop`: crops the output GeoTIFF to the AOI bbox (defaults to keeping the full scene)
 - `--crs EPSG:CODE`: reprojects the output GeoTIFF, e.g. `EPSG:4326` or `EPSG:3857` (defaults to the scene's own UTM zone). The code is added to the file name, e.g. `_epsg4326`.
 - `--keep-tif`: by default each downloaded source `.tif` is deleted after converting
@@ -239,7 +240,8 @@ How the data is fetched: JAXA's L2.2 files are Cloud-Optimized GeoTIFFs (~400 MB
     Flags:
     - `--db`
     - `--mask`: needs the scene's `_MSK.tif` (download it with `src.alos2_dl --mask`)
-    - `--destripe`: remove the ScanSAR burst stripes (see `src/alos2_destripe.py`)
+    - `--destripe`: remove the ScanSAR burst and beam stripes (see `src/alos2_destripe.py`)
+    - `--destripe-fine`: the same at 50 m instead of 100 m; fainter lines at the seams, slower
     - `--bbox MIN_LON MIN_LAT MAX_LON MAX_LAT --aoi-name NAME`: crop, required with bbox
     - `--remove-tif`
     - `--out-dir`

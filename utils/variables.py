@@ -140,10 +140,13 @@ ALOS2_REMOTE_MAX_PIXELS = 50_000_000
 # Burst destriping (src/alos2_destripe.py). The stripes are estimated on the whole scene downsampled by this
 # factor (100 m), which is plenty for stripes ~5 km apart and keeps the full-scene arrays small.
 ALOS2_DESTRIPE_DECIMATION = 4
+# --destripe-fine: 50 m instead, which follows the sharp seams between bursts and beams more closely
+# (fainter thin lines there), at ~6x the time and ~1.5 GB more memory per file
+ALOS2_DESTRIPE_FINE_DECIMATION = 2
 # Pixels further than this from their local background (slicks, ships, land) are left out of the estimate
 ALOS2_DESTRIPE_CLIP_DB = 4
-# Width of each range strip the stripes are fitted in, on the downsampled grid (48 px = 4.8 km)
-ALOS2_DESTRIPE_STRIP_PX = 48
+# Width of each range strip the stripes are fitted in
+ALOS2_DESTRIPE_STRIP_KM = 4.8
 # Along-track range searched for the burst period (5.4 km in WBD scenes)
 ALOS2_DESTRIPE_PERIOD_KM = (2, 15)
 # The stripe at each point is the median over this many bursts either side (plus its own),
