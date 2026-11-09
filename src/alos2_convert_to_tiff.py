@@ -18,8 +18,6 @@ from utils.geometry import epsg_crs
 from utils.variables import (
     ALOS2_ATTRIBUTION,
     ALOS2_CAL_DB,
-    ALOS2_DESTRIPE_DECIMATION,
-    ALOS2_DESTRIPE_FINE_DECIMATION,
     ALOS2_GEOTIFF_PATH,
     ALOS2_MASK_DROP,
     ALOS2_TIF_PATH,
@@ -74,18 +72,15 @@ def convert_scene_to_geotiff(
     overwrite: bool = False,
     dst_crs: str | None = None,
     destripe: bool = False,
-    destripe_fine: bool = False,
 ) -> Path:
     """
     Convert a single, specified PALSAR-2 L2.2 HH/HV GeoTIFF (DN) to a calibrated gamma0 GeoTIFF.
     tif_path can also be a JAXA download URL, read remotely without downloading the whole file
     (worthwhile with a bbox, since only the cropped tiles are fetched). The mask is always a local file.
     dst_crs (e.g. "EPSG:4326") reprojects the output; by default it stays on the scene's UTM grid.
-    destripe removes the ScanSAR burst stripes (see src/alos2_destripe.py); they're estimated from the
-    whole scene at low resolution, so a remote crop also reads the whole scene at that resolution.
-    destripe_fine does the same at 50 m instead of 100 m (sharper at the seams, slower).
+    destripe removes the ScanSAR burst and beam stripes (see src/alos2_destripe.py); they're estimated
+    from the whole scene at 50 m, so a remote crop also reads the whole scene at that resolution.
     """
-    destripe = destripe or destripe_fine
 
     remote = is_url(tif_path)
     tif_path = resolve_tif(tif_path)
@@ -112,7 +107,7 @@ def convert_scene_to_geotiff(
     if mask:
         suffix += "_masked"
     if destripe:
-        suffix += "_destriped-fine" if destripe_fine else "_destriped"
+        suffix += "_destriped"
     # CRS before the AOI name: the viewer notebook finds crops by the name ending in _<aoi>
     if dst_crs:
         suffix += f"_epsg{CRS.from_user_input(dst_crs).to_epsg()}"
@@ -171,13 +166,7 @@ def convert_scene_to_geotiff(
                     rasterio.Env(**REMOTE_GDAL_ENV),
                     rasterio.open(msk_source) as ocean_msk,
                 ):
-                    stripes = scene_stripes(
-                        src,
-                        ocean_msk,
-                        ALOS2_DESTRIPE_FINE_DECIMATION
-                        if destripe_fine
-                        else ALOS2_DESTRIPE_DECIMATION,
-                    )
+                    stripes = scene_stripes(src, ocean_msk)
 
             with rasterio.open(
                 native if warp else part,
@@ -223,8 +212,7 @@ def convert_scene_to_geotiff(
                 )
                 if destripe:
                     dst.update_tags(
-                        DESTRIPED=f"burst and beam stripes removed, estimated at "
-                        f"{50 if destripe_fine else 100} m (src/alos2_destripe.py)"
+                        DESTRIPED="burst and beam stripes removed (src/alos2_destripe.py)"
                     )
 
             # reproject_tif copies these tags over; UNITS follows db, so it's right after reprojecting too
@@ -266,7 +254,6 @@ def convert_scenes_to_geotiff(
     overwrite: bool = False,
     dst_crs: str | None = None,
     destripe: bool = False,
-    destripe_fine: bool = False,
 ) -> list[Path]:
     """
     Convert a list of PALSAR-2 L2.2 tifs to calibrated GeoTIFFs.
@@ -289,7 +276,6 @@ def convert_scenes_to_geotiff(
                     overwrite,
                     dst_crs,
                     destripe,
-                    destripe_fine,
                 )
             )
 
@@ -339,13 +325,8 @@ def main():
     parser.add_argument(
         "--destripe",
         action="store_true",
-        help="Remove the ScanSAR burst stripes, estimated from the whole scene (adds _destriped to the name).",
-    )
-    parser.add_argument(
-        "--destripe-fine",
-        action="store_true",
-        help="Like --destripe but estimated at 50 m instead of 100 m: fainter thin lines at the burst and beam "
-        "seams, ~6x slower and ~1.5 GB more memory per file (adds _destriped-fine to the name).",
+        help="Remove the ScanSAR burst and beam stripes, estimated from the whole scene at 50 m "
+        "(adds _destriped to the name).",
     )
     parser.add_argument(
         "--bbox",
@@ -404,7 +385,6 @@ def main():
             args.overwrite,
             args.crs,
             args.destripe,
-            args.destripe_fine,
         )
 
 

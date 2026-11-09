@@ -211,16 +211,17 @@ def burst_stripes(
     return out.astype("float32")
 
 
-def scene_stripes(
-    src, msk=None, decimation: int = ALOS2_DESTRIPE_DECIMATION
-) -> np.ndarray:
+def scene_stripes(src, msk=None) -> np.ndarray:
     """
     Stripe pattern (dB) of a whole L2.2 scene (an open DN GeoTIFF), on the scene grid downsampled by
-    decimation. Always the whole scene, even for a crop: a crop is too short along track, and may not
-    reach the swath edges, to estimate the stripes from. msk is the scene's open _MSK.tif, whose
-    ocean flag the stripes across the swath are measured on (without it, they're left).
+    ALOS2_DESTRIPE_DECIMATION. Always the whole scene, even for a crop: a crop is too short along
+    track, and may not reach the swath edges, to estimate the stripes from. msk is the scene's open
+    _MSK.tif, whose ocean flag the stripes across the swath are measured on (without it, they're left).
     """
-    shape = (src.height // decimation, src.width // decimation)
+    shape = (
+        src.height // ALOS2_DESTRIPE_DECIMATION,
+        src.width // ALOS2_DESTRIPE_DECIMATION,
+    )
     dn = src.read(1, out_shape=shape, resampling=Resampling.average).astype("float32")
     # dB up to the calibration constant, which doesn't change the stripe pattern; DN 0 is nodata
     with np.errstate(divide="ignore"):

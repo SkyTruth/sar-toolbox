@@ -68,7 +68,6 @@ def process_scene(
                         overwrite=args.overwrite,
                         dst_crs=args.crs,
                         destripe=args.destripe,
-                        destripe_fine=args.destripe_fine,
                     )
                 )
             # Only reached if every polarization converted
@@ -124,13 +123,8 @@ def main() -> None:
     parser.add_argument(
         "--destripe",
         action="store_true",
-        help="Remove the ScanSAR burst stripes, estimated from the whole scene (with --crop, also reads the whole scene at 100 m).",
-    )
-    parser.add_argument(
-        "--destripe-fine",
-        action="store_true",
-        help="Like --destripe but estimated at 50 m: fainter thin lines at the seams, ~6x slower and up to ~5 GB "
-        "per scene, so consider --workers 2 (adds _destriped-fine to the name).",
+        help="Remove the ScanSAR burst and beam stripes, estimated from the whole scene at 50 m (with --crop, "
+        "also reads the whole scene at that resolution). Uses up to ~5 GB per scene, so consider --workers 2.",
     )
     parser.add_argument(
         "--crop",

@@ -138,11 +138,9 @@ ALOS2_PIXEL_SIZE_M = 25
 # so they break even near 65 Mpx per file. 50 Mpx (~175 km box at 25 m) leaves margin for faster downloads.
 ALOS2_REMOTE_MAX_PIXELS = 50_000_000
 # Burst destriping (src/alos2_destripe.py). The stripes are estimated on the whole scene downsampled by this
-# factor (100 m), which is plenty for stripes ~5 km apart and keeps the full-scene arrays small.
-ALOS2_DESTRIPE_DECIMATION = 4
-# --destripe-fine: 50 m instead, which follows the sharp seams between bursts and beams more closely
-# (fainter thin lines there), at ~6x the time and ~1.5 GB more memory per file
-ALOS2_DESTRIPE_FINE_DECIMATION = 2
+# factor (50 m), fine enough to follow the sharp seams between bursts and beams. 4 (100 m) is ~6x faster
+# and uses ~1.5 GB less memory per file, but leaves thin lines along those seams.
+ALOS2_DESTRIPE_DECIMATION = 2
 # Pixels further than this from their local background (slicks, ships, land) are left out of the estimate
 ALOS2_DESTRIPE_CLIP_DB = 4
 # Width of each range strip the stripes are fitted in
