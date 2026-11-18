@@ -20,6 +20,7 @@ from utils.variables import (
     NISAR_GEOTIFF_PATH,
     NISAR_H5_PATH,
     REPO_ROOT,
+    SLICK_MATCHES_PATH,
 )
 
 AOIS_TEMPLATE = """\
@@ -59,6 +60,7 @@ def make_dirs() -> None:
         ALOS2_GRANULE_CSV_PATH,
         ALOS2_TIF_PATH,
         ALOS2_GEOTIFF_PATH,
+        SLICK_MATCHES_PATH,
     ):
         if folder.exists():
             print(f"exists:  {folder.relative_to(REPO_ROOT)}")

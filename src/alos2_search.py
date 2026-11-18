@@ -112,8 +112,8 @@ def list_scene_ids(client, orbit_lo: int, orbit_hi: int) -> list[str]:
         query["continuation-token"] = token.text
 
 
-def fetch_footprint(client, scene_id: str):
-    """Scene footprint from its STAC item. The rest of the item has known defects, so only geometry is used."""
+def fetch_item(client, scene_id: str) -> dict:
+    """Scene's STAC item. Its geometry and datetime (scene centre, matches summary.xml) are usable; the rest has known defects."""
     resp = (
         client.get(f"{JAXA_L22_BUCKET_URL}/{JAXA_L22_PREFIX}{scene_id}.json")
         .build()
@@ -121,7 +121,12 @@ def fetch_footprint(client, scene_id: str):
     )
     if resp.status != 200:
         raise RuntimeError(f"{resp.status} for {scene_id}.json")
-    geom = shape(resp.json()["geometry"])
+    return resp.json()
+
+
+def item_footprint(item: dict):
+    """Scene footprint from its STAC item's geometry."""
+    geom = shape(item["geometry"])
 
     # Footprints crossing the antimeridian come back ~360 deg wide; unwrap and keep a copy on each side
     min_x, _, max_x, _ = geom.bounds
@@ -131,6 +136,21 @@ def fetch_footprint(client, scene_id: str):
         )
         geom = unwrapped.union(translate(unwrapped, xoff=-360))
     return geom
+
+
+def fetch_footprint(client, scene_id: str):
+    """Scene footprint from its STAC item."""
+    return item_footprint(fetch_item(client, scene_id))
+
+
+def scene_urls(scene: dict) -> dict:
+    """Download URLs for a parsed scene; HH-only modes have no HV file."""
+    base = f"{JAXA_L22_BUCKET_URL}/{JAXA_L22_PREFIX}{scene['Granule Name']}"
+    return {
+        "URL": f"{base}_HH_SLP.tif",
+        "HV URL": f"{base}_HV_SLP.tif" if scene["Polarization"] == "HH+HV" else None,
+        "MSK URL": f"{base}_MSK.tif",
+    }
 
 
 def construct_s3_search(
@@ -172,17 +192,8 @@ def construct_s3_search(
                 )
             )
 
-    base = f"{JAXA_L22_BUCKET_URL}/{JAXA_L22_PREFIX}"
     rows = [
-        scene
-        | {
-            "URL": f"{base}{scene['Granule Name']}_HH_SLP.tif",
-            "HV URL": f"{base}{scene['Granule Name']}_HV_SLP.tif"
-            if scene["Polarization"] == "HH+HV"
-            else None,
-            "MSK URL": f"{base}{scene['Granule Name']}_MSK.tif",
-            "Footprint WKT": footprint.wkt,
-        }
+        scene | scene_urls(scene) | {"Footprint WKT": footprint.wkt}
         for scene, footprint in zip(candidates, footprints)
         if footprint.intersects(aoi)
     ]
