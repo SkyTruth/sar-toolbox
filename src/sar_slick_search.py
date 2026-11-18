@@ -26,6 +26,7 @@ from src.alos2_search import (
     scene_urls,
 )
 from utils.variables import (
+    ALOS2_GRANULE_CSV_PATH,
     ALOS2_ORBIT_PAD,
     ALOS2_ORBIT_REF_DATE,
     ASF_API_BASE,
@@ -33,6 +34,7 @@ from utils.variables import (
     ASF_DEFAULT_PROCESSING_LEVEL,
     GRANULE_CSV_PATH,
     NISAR_ARCHIVE_START,
+    SLICK_MATCHES_PATH,
 )
 
 ASF_TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
@@ -482,14 +484,14 @@ def main() -> None:
         "--out",
         type=Path,
         default=None,
-        help="Output GeoParquet path. Defaults to data/nisar_granule_files/; a CSV of matched granules per sensor is written next to it.",
+        help="Output GeoParquet path (default: a new file in data/slick_matches/). Each sensor's granule CSV goes in its granule folder (data/nisar_granule_files/, data/alos2_granule_files/), or next to --out if given.",
     )
     args = parser.parse_args()
 
     request_date = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
     window = timedelta(hours=args.window_hours)
     out = args.out or (
-        GRANULE_CSV_PATH
+        SLICK_MATCHES_PATH
         / f"slick_sar_matches_{args.window_hours:g}h_requestMade{request_date}.parquet"
     )
 
@@ -527,9 +529,18 @@ def main() -> None:
     result.write_parquet(out, metadata={"geo": geo_metadata})
     written = [out]
 
+    # Granule CSVs go in each sensor's granule folder, where nisar_dl / alos2_dl look up bare file names;
+    # with --out they go next to it instead
+    csv_dirs = {
+        "nisar": args.out.parent if args.out else GRANULE_CSV_PATH,
+        "palsar": args.out.parent if args.out else ALOS2_GRANULE_CSV_PATH,
+    }
+    for sensor in args.sensors:
+        csv_dirs[sensor].mkdir(parents=True, exist_ok=True)
+
     if "nisar" in args.sensors:
         # Same column names as src.asf_sar_search, so src.nisar_dl can download straight from it
-        nisar_csv = out.with_name(f"{out.stem}_nisar_granules.csv")
+        nisar_csv = csv_dirs["nisar"] / f"{out.stem}_nisar_granules.csv"
         result.filter(pl.col("nisar_id").is_not_null()).unique(
             "nisar_id", keep="first", maintain_order=True
         ).select(
@@ -545,7 +556,7 @@ def main() -> None:
 
     if "palsar" in args.sensors:
         # Same column names as src.alos2_search, so src.alos2_dl can download straight from it
-        palsar_csv = out.with_name(f"{out.stem}_palsar_granules.csv")
+        palsar_csv = csv_dirs["palsar"] / f"{out.stem}_palsar_granules.csv"
         result.filter(pl.col("palsar_id").is_not_null()).unique(
             "palsar_id", keep="first", maintain_order=True
         ).select(

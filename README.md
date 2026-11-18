@@ -26,7 +26,7 @@ uv sync --locked
 ```bash
 uv run python -m utils.setup
 ```
-This creates `.env` (from `.env.default`), an empty `utils/aois.py`, `archive/`, and the `data/nisar_*` and `data/alos2_*` folders.
+This creates `.env` (from `.env.default`), an empty `utils/aois.py`, `archive/`, and the `data/nisar_*` and `data/alos2_*` and `data/slick_matches/` folders.
 
 
 Optional: Start Jupyter with the same environment:
@@ -54,6 +54,7 @@ the interpreter under `.venv`.
   - `nisar_geotiffs/`: converted GeoTIFFs
   - `nisar_granule_files/`: granule CSVs from ASF searches
   - `nisar_h5_scenes/`: downloaded `.h5` scenes
+  - `slick_matches/`: slick x SAR scene match GeoParquets from `src.sar_slick_search`
 - `notebooks/`: Jupyter notebooks (outputs should be stripped before committing)
 - `archive/`: old snippets, miscellaneous code used only in local, throw-away tests (git-ignored)
 
@@ -255,7 +256,7 @@ Flags:
 - `--window-hours`: defaults to 24
 - `--processing-level`: NISAR product, defaults to GCOV
 - `--workers`: concurrent ASF requests for NISAR, defaults to 8
-- `--out`: output GeoParquet path, defaults to `data/nisar_granule_files/`
+- `--out`: output GeoParquet path, defaults to a new file in `data/slick_matches/` Each sensor's granule CSV goes in its granule folder (data/nisar_granule_files/, data/alos2_granule_files/), or next to --out if it's given.
 
 Every input row is kept in the output, in input order, once per NISAR scene x PALSAR-2 scene of its slick; rows whose slick has no scene from a sensor have empty columns for it. `nisar_search_status` and `palsar_search_status` say whether each slick was `searched`, `failed`, or older than that sensor's data (`before_nisar`: Oct 2025; `before_palsar`: Aug 2014). All NISAR data maturities are searched, since most of the Oct 2025 - Jan 2026 archive is BETA rather than PROVISIONAL. JAXA's L2.2 archive mostly covers land, coasts and polar regions and appears about a month after acquisition, so recent slicks may have no PALSAR-2 scene yet. Three files are written:
 - a GeoParquet including, per sensor, the scene id and time, `nisar_dt_hours` / `palsar_dt_hours` (scene minus slick time), `nisar_coverage_frac` / `palsar_coverage_frac` (share of the slick inside the scene footprint), and download URLs
