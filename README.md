@@ -248,7 +248,7 @@ How the data is fetched: JAXA's L2.2 files are Cloud-Optimized GeoTIFFs (~400 MB
 ## Find NISAR and PALSAR-2 scenes near slicks
 Given a GeoParquet of slicks (columns `slick`, `slick_timestamp` in UTC, and `geometry`), find every NISAR and PALSAR-2 scene whose footprint overlaps a slick within +/- 24 hours of it. NISAR is searched through the ASF API; PALSAR-2 ScanSAR L2.2 through JAXA's public S3 bucket, using each scene's STAC item for its footprint and centre time. An S2 match file (one row per slick x S2 scene) works as input: every input row is kept, each slick is searched once, and its scenes are attached to all of its rows, with an `n_s2_matches` count.
 ```bash
-uv run python -m src.nisar_slick_search --slicks PATH/TO/SLICKS.parquet
+uv run python -m src.sar_slick_search --slicks PATH/TO/SLICKS.parquet
 ```
 Flags:
 - `--sensors nisar|palsar [...]`: defaults to both
