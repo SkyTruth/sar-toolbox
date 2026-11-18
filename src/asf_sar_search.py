@@ -89,6 +89,7 @@ def main() -> None:
         "--start",
         "--s_date",
         dest="start",
+        required=True,
         help=("Start Date: YYYY-MM-DD"),
     )
     parser.add_argument(
@@ -96,6 +97,7 @@ def main() -> None:
         "--end",
         "--e_date",
         dest="end",
+        required=True,
         help=("End Date: YYYY-MM-DD"),
     )
     parser.add_argument(

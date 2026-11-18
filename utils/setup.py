@@ -12,19 +12,20 @@ Creates any files or directories that are missing (or needed .git-ignores). Will
 import shutil
 
 from utils.variables import (
+    ALOS2_GEOTIFF_PATH,
+    ALOS2_GRANULE_CSV_PATH,
+    ALOS2_TIF_PATH,
     ARCHIVE_PATH,
     GRANULE_CSV_PATH,
     NISAR_GEOTIFF_PATH,
     NISAR_H5_PATH,
     REPO_ROOT,
-    ALOS2_GRANULE_CSV_PATH,
-    ALOS2_TIF_PATH,
-    ALOS2_GEOTIFF_PATH,
 )
 
 AOIS_TEMPLATE = """\
 # AOIs. These are git-ignored.
 # Format: "aoi-name": {"bbox": "min_lon,min_lat,max_lon,max_lat"},
+#     or: "aoi-name": {"point": "lon,lat", "buffer_km": 10},  (bbox computed from the point)
 
 SEARCH_AOIS = {
 }

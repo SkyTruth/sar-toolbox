@@ -3,6 +3,8 @@ This is a toolbox for searching, downloading, and accessing NISAR data. It began
 
 A general note on the NISAR data processing described below, nisar_access defaults to Frequency B products. These are lower resolution, and also substantially smaller than Frequency A data. The suggested workflow is to search and evaluate on Frequency B data, and only download the Frequency A as needed.
 
+It also supports ALOS-2 PALSAR-2 ScanSAR L2.2 imagery from JAXA's public S3 bucket (no login needed); see PALSAR-2 Data Access below.
+
 In time, it will hopefully explore access to other less-utilized NASA data products, such as ICESat-2. 
 
 Where possible it prioritizes the use of Rust-based libraries (e.g. polars, pyreqwest, ruff).
@@ -24,7 +26,7 @@ uv sync --locked
 ```bash
 uv run python -m utils.setup
 ```
-This creates `.env` (from `.env.default`), an empty `utils/aois.py`, `archive/`, and the `data/nisar_*` folders.
+This creates `.env` (from `.env.default`), an empty `utils/aois.py`, `archive/`, and the `data/nisar_*` and `data/alos2_*` folders.
 
 
 Optional: Start Jupyter with the same environment:
@@ -39,12 +41,15 @@ the interpreter under `.venv`.
 
 # Repository Structure
 
-- `src/`: search / download / convert tools, run as modules (see NISAR Data Access)
+- `src/`: search / download / convert tools, run as modules (see NISAR Data Access and PALSAR-2 Data Access)
 - `utils/aois.py`: private AOIs (git-ignored)
 - `utils/generate_aoi_details.py`: interactive helper that builds an AOI entry
 - `utils/setup.py`: one-time setup; creates `.env`, `utils/aois.py`, `archive/`, and the `data/` folders if missing
-- `utils/variables.py`: shared constants: ASF settings, data paths, per-product H5 layouts, `.env` loading
+- `utils/variables.py`: shared constants: ASF settings, data paths, per-product H5 layouts, `.env` loading, JAXA/PALSAR-2 settings
 - `data/`: git-ignored except `.gitkeep`
+  - `alos2_geotiffs/`: converted PALSAR-2 gamma0 GeoTIFFs
+  - `alos2_granule_files/`: granule CSVs from JAXA S3 searches
+  - `alos2_tif_scenes/`: downloaded PALSAR-2 source `.tif` scenes
   - `earth_access_tests/`, `other_data/`: samples for other explorations
   - `nisar_geotiffs/`: converted GeoTIFFs
   - `nisar_granule_files/`: granule CSVs from ASF searches
@@ -99,7 +104,11 @@ The code in this repo requires an Earthdata access token. Tokens last 60 days. T
 6. In the `.env` set the `EARTHDATA_TOKEN_DATE` to the date the token was generated
 
 ## Define AOIs
-The search and download features of this repository depend on AOIs, currently defined by bounding boxes. AOI information should be stored in the git-ignored `utils/aois.py`. A few test AOIs (wva-test-area, drc-test-area, indian-ocean-test-area) defined in utils/variables.py are always available; an AOI in aois.py with the same name overrides them. Entry format: `"aoi-name": {"bbox": "min_lon,min_lat,max_lon,max_lat"},`. You can append the file directly following that format, or you can run the following code to generate one from bounds or a point plus a km buffer:
+The search and download features of this repository depend on AOIs, currently defined by bounding boxes. AOI information should be stored in the git-ignored `utils/aois.py`. A few test AOIs (wva-test-area, drc-test-area, indian-ocean-test-area) defined in utils/variables.py are always available; an AOI in aois.py with the same name overrides them. Entry format, either a bounding box or a point with a buffer:
+- `"aoi-name": {"bbox": "min_lon,min_lat,max_lon,max_lat"},`
+- `"aoi-name": {"point": "lon,lat", "buffer_km": 10},`: the bbox is computed as a square `buffer_km` around the point (in the point's UTM zone). If an entry has both, the point and buffer take precedence.
+
+You can append the file directly following that format, or you can run the following code to generate one from bounds or a point plus a km buffer:
 ```bash
 uv run python utils/generate_aoi_details.py
 ```
@@ -118,13 +127,29 @@ uv run python -m src.nisar_access --aoi AOI_NAME --sd YYYY-MM-DD --ed YYYY-MM-DD
 Flags:
 - `--product`
 - `--polarization POL [POL ...]`: one GeoTIFF per polarization; defaults per product, polarization options may not be consistent by collection
+    - Can also be declared as `--pol`
     - GCOV: `HHHH`, `HVHV`, `VVVV`
     - GSLC/GUNW: `HH`, `HV`
 - `--frequency A|B`: Frequency A products are higher resolution, but also larger files. Defaults to Frequency B.
+    - Can also be declared as `--freq`
 - `--db`: applies to GSLC/GCOV only.
-- `--crop`: crops the output GeoTIFF to the AOI bbox (defaults to keeping the full scene)
-- `--keep-h5`: by default each `.h5` is deleted after converting
+- `--crop`: crops the output GeoTIFF to the AOI bbox (defaults to keeping the full scene).
+- `--crs EPSG:CODE`: reprojects the output GeoTIFF, e.g. `EPSG:4326` or `EPSG:3857` (defaults to the scene's own CRS, usually UTM). The code is added to the file name, e.g. `_epsg4326`.
+- `--keep-h5`: by default each downloaded `.h5` is deleted after converting
 - `--out-dir`: a user defined path to an output directory, if not defined geotiffs will be written to `data/nisar_geotiffs/`
+- `--overwrite`: reconvert even if the GeoTIFF already exists (e.g. after changing an AOI's bbox or `buffer_km`)
+- `--workers N`: scenes processed in parallel (default 4, and recommend limiting to 4 or less). Speeds up remote reads near-linearly; whole-file downloads share bandwidth, so they gain little, and each needs ~6 GB of disk at once.
+
+How the data is fetched: each `.h5` is several GB, but `nisar_access` only needs one band from it. When that band is small, it is read directly from ASF over HTTP instead of downloading the whole file:
+
+For GCOV, the switch is the number of pixels read: output pixels (crop or full scene, at 10 m for frequency A or 80 m for B) × number of polarizations. Up to 60 Mpx the bands are read remotely; above that the whole `.h5` is downloaded.
+
+| GCOV, one polarization | `--crop` (20 km AOI) | uncropped |
+|---|---|---|
+| Frequency A | ~4 Mpx: read remotely (~15 s/scene) | ~1,100 Mpx: download whole `.h5` (~80-100 s/scene) |
+| Frequency B | ~0.06 Mpx: read remotely (~6 s/scene) | ~18 Mpx: read remotely (~12 s/scene) |
+
+Remote reads are many small sequential requests, so their time grows with the pixels read: about 10 s + 0.9 s per million pixels (a 50 km AOI at frequency A is ~25 Mpx, ~40 s), versus ~80-100 s to download a whole `.h5` whatever is used from it. The crossover is near 80 Mpx; the 60 Mpx limit is `NISAR_REMOTE_MAX_PIXELS` in `utils/variables.py`. Times are from test scenes at ~65 MB/s. Other products read crops remotely and download full scenes. If a scene's `.h5` is already in `data/nisar_h5_scenes/` (e.g. from `--keep-h5`), it is used instead, and deleted afterwards unless `--keep-h5` is given.
 
 ### Step-by-step runs
 
@@ -147,12 +172,78 @@ Flags:
     ```
     Flags:
     - `--polarization`
-    - `--frequency A|B`
+        - Can also be declared as `--pol`
+    - `--frequency A|B`: defaults to B
+        - Can also be declared as `--freq`
     - `--db`
-    - `--bbox MIN_LON MIN_LAT MAX_LON MAX_LAT --aoi-name NAME`: crop
+    - `--bbox MIN_LON MIN_LAT MAX_LON MAX_LAT --aoi-name NAME`: crop, required with bbox. `--h5` also accepts ASF download URLs (the `URL` column of the search CSV), which with `--bbox` reads just that area without downloading the file.
     - `--remove-h5`
     - `--out-dir`
+    - `--overwrite`
+    - `--crs EPSG:CODE`: reproject the output (defaults to the scene's own CRS)
     - `--inspect`: print the H5 structure instead of converting
+
+# PALSAR-2 Data Access
+ALOS-2 PALSAR-2 ScanSAR L2.2 scenes (Aug 2014 to present) are read from JAXA's public S3 bucket, so no credentials are needed. Searches use the same AOIs as NISAR (see Define AOIs above). All commands below must be run from the repository root.
+
+JAXA's free ScanSAR archive mostly covers tropical land, coasts and polar regions; open ocean and much of the US, Europe and the Middle East are rarely or never observed, so an empty search is common outside those areas.
+
+Any product or figure using this data must credit JAXA (see: `ALOS2_ATTRIBUTION` in `utils/variables.py`).
+
+## Beam Modes
+- `WBD`, `WWD`, `VBD`: HH and HV
+- `WBS`, `WWS`: HH only; HV is skipped for these scenes
+
+
+## Search, download, and convert PALSAR-2 data
+
+```bash
+uv run python -m src.alos2_access --aoi AOI_NAME --sd YYYY-MM-DD --ed YYYY-MM-DD
+```
+Flags:
+- `--mode MODE [MODE ...]`: only these beam modes (defaults to all)
+- `--polarization POL [POL ...]`: `HH` and/or `HV`, one GeoTIFF per polarization (defaults to both)
+    - Can also be declared as `--pol`
+- `--db`: write gamma0 in dB
+- `--mask`: set layover, shadow and invalid pixels to NaN (also downloads each scene's `_MSK.tif`)
+- `--crop`: crops the output GeoTIFF to the AOI bbox (defaults to keeping the full scene)
+- `--crs EPSG:CODE`: reprojects the output GeoTIFF, e.g. `EPSG:4326` or `EPSG:3857` (defaults to the scene's own UTM zone). The code is added to the file name, e.g. `_epsg4326`.
+- `--keep-tif`: by default each downloaded source `.tif` is deleted after converting
+- `--out-dir`: a user defined path to an output directory, if not defined geotiffs will be written to `data/alos2_geotiffs/`
+- `--overwrite`: reconvert even if the GeoTIFF already exists (e.g. after changing an AOI's bbox or `buffer_km`)
+- `--workers N`: scenes processed in parallel (default 4, and recommend limiting to 4 or less). Speeds up remote reads; whole-file downloads share bandwidth.
+
+How the data is fetched: JAXA's L2.2 files are Cloud-Optimized GeoTIFFs (~400 MB per polarization), so with `--crop` only the tiles covering the AOI are read over HTTP instead of downloading whole files, as long as the crop is ≤ 50 Mpx per file (~175 km box at 25 m; `ALOS2_REMOTE_MAX_PIXELS` in `utils/variables.py`). A 20 km AOI takes ~1.5 s per scene for HH + HV + mask, versus ~35 s to download the whole files (JAXA's bucket downloaded at ~24 MB/s in testing). The mask (~1 MB) is always downloaded whole. Uncropped scenes, and crops above the limit, download whole files. If a source `.tif` is already in `data/alos2_tif_scenes/` (e.g. from `--keep-tif`), it is used instead, and deleted afterwards unless `--keep-tif` is given.
+
+### Step-by-step runs
+
+1. Search JAXA's S3 archive. Writes a CSV file to `data/alos2_granule_files/`.
+    ```bash
+    uv run python -m src.alos2_search --aoi AOI_NAME --sd YYYY-MM-DD --ed YYYY-MM-DD
+    ```
+    OR use an ad-hoc bbox, with an optional `--location` label in the filename:
+    ```bash
+    uv run python -m src.alos2_search --bbox 'MIN_LON,MIN_LAT,MAX_LON,MAX_LAT' --location LABEL --sd YYYY-MM-DD --ed YYYY-MM-DD
+    ```
+    `--mode MODE [MODE ...]` limits the search to those beam modes.
+2. Download the PALSAR-2 scenes to `data/alos2_tif_scenes/`. Scenes already on disk are skipped.
+    ```bash
+    uv run python -m src.alos2_dl --granule-file GRANULE_LIST.csv
+    ```
+    `--granule-file` is required; a bare filename is looked up in `data/alos2_granule_files/`. `--granule NAME [NAME ...]` downloads only those granules from the CSV. `--polarization` (can also be declared as `--pol`) picks `HH` and/or `HV` (defaults to both). `--mask` also downloads each scene's `_MSK.tif`, needed for `--mask` at conversion.
+3. Convert the source tifs (DN) to calibrated gamma0 GeoTIFFs in `data/alos2_geotiffs/`. A bare filename is looked up in `data/alos2_tif_scenes/`.
+    ```bash
+    uv run python -m src.alos2_convert_to_tiff --tif SCENE_HH_SLP.tif [SCENE_HV_SLP.tif ...]
+    ```
+    Flags:
+    - `--db`
+    - `--mask`: needs the scene's `_MSK.tif` (download it with `src.alos2_dl --mask`)
+    - `--bbox MIN_LON MIN_LAT MAX_LON MAX_LAT --aoi-name NAME`: crop, required with bbox
+    - `--remove-tif`
+    - `--out-dir`
+    - `--overwrite`
+    - `--crs EPSG:CODE`: reproject the output (defaults to the scene's own UTM zone)
+    - `--inspect`: print the tif's profile and tags instead of converting
 
 ## Find NISAR and PALSAR-2 scenes near slicks
 Given a GeoParquet of slicks (columns `slick`, `slick_timestamp` in UTC, and `geometry`), find every NISAR and PALSAR-2 scene whose footprint overlaps a slick within +/- 24 hours of it. NISAR is searched through the ASF API; PALSAR-2 ScanSAR L2.2 through JAXA's public S3 bucket, using each scene's STAC item for its footprint and centre time. An S2 match file (one row per slick x S2 scene) works as input: every input row is kept, each slick is searched once, and its scenes are attached to all of its rows, with an `n_s2_matches` count.
