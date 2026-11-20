@@ -16,9 +16,11 @@ from rasterio.warp import transform_bounds
 from rasterio.windows import Window, from_bounds
 from rasterio.windows import transform as window_transform
 
+from processing.speckle import add_lee_argument, lee_filter_block
 from utils.geometry import epsg_crs
 from utils.variables import (
     EARTHDATA_TOKEN,
+    LEE_WINDOW,
     NISAR_GEOTIFF_PATH,
     NISAR_H5_PATH,
     NISAR_PROCESSING_INFO,
@@ -133,11 +135,14 @@ def convert_scene_to_geotiff(
     out_dir: Path | str = NISAR_GEOTIFF_PATH,
     overwrite: bool = False,
     dst_crs: str | None = None,
+    lee_window: int | None = None,
 ) -> Path:
     """
     Convert a single, specified h5 file to GeoTIFF.
     h5_path can also be an ASF download URL, read remotely without downloading the whole file
     (worthwhile with a bbox, since only the cropped area is fetched).
+    lee_window (odd, e.g. 5) applies a Lee speckle filter (GSLC/GCOV only), with the product's ENL from
+    NISAR_PROCESSING_INFO.
     """
 
     remote = is_url(h5_path)
@@ -157,6 +162,10 @@ def convert_scene_to_geotiff(
         raise ValueError(
             f"--db is only meaningful for GSLC/GCOV, not {processing_level}"
         )
+    if lee_window and not data_specs.get("lee_enl"):
+        raise ValueError(
+            f"--lee only applies to GSLC/GCOV intensity, not {processing_level}"
+        )
     names = {
         "frequency": frequency,
         "polarization": polarization or data_specs["default_polarization"],
@@ -164,6 +173,8 @@ def convert_scene_to_geotiff(
 
     # Define outfile name, same as infile name but just as .tiffName the output after the scene so different scenes never overwrite each other
     suffix = data_specs["suffix"].format(**names)
+    if lee_window:
+        suffix += f"_lee{lee_window}"
     if db:
         suffix += "_dB"
     if dst_crs:
@@ -240,14 +251,33 @@ def convert_scene_to_geotiff(
                 predictor=3,
                 BIGTIFF="yes",
             ) as dst:
-                # Write in row blocks so the full array never has to fit in memory
-                for r in range(0, h, 2048):
-                    n = min(2048, h - r)
-                    block = data[
-                        r_off + r : r_off + r + n, c_off : c_off + w
-                    ]  # h5py reads only this slice
+                # Write in row blocks so the full array never has to fit in memory (smaller blocks when
+                # filtering, which holds several float64 copies of each block)
+                rows = 512 if lee_window else 2048
+                for r in range(0, h, rows):
+                    n = min(rows, h - r)
+                    if lee_window:
+                        # Linear intensity, read with a margin so block edges are filtered as in the whole scene
+                        block = lee_filter_block(
+                            lambda r0, r1, c0, c1: to_output(data[r0:r1, c0:c1]),
+                            r_off + r,
+                            n,
+                            c_off,
+                            w,
+                            *data.shape,
+                            lee_window,
+                            data_specs["lee_enl"][frequency],
+                        ).astype("float32")
+                    else:
+                        block = data[
+                            r_off + r : r_off + r + n, c_off : c_off + w
+                        ]  # h5py reads only this slice
                     dst.write(
                         to_output(block, db and not warp), 1, window=Window(0, r, w, n)
+                    )
+                if lee_window:
+                    dst.update_tags(
+                        SPECKLE_FILTER=f"Lee {lee_window}x{lee_window}, ENL {data_specs['lee_enl'][frequency]}"
                     )
 
             if warp:
@@ -288,6 +318,7 @@ def convert_scenes_to_geotiff(
     out_dir: Path | str = NISAR_GEOTIFF_PATH,
     overwrite: bool = False,
     dst_crs: str | None = None,
+    lee_window: int | None = None,
 ) -> list[Path]:
     """
     Convert a list of h5 scenes to GeoTIFF.
@@ -310,6 +341,7 @@ def convert_scenes_to_geotiff(
                     out_dir,
                     overwrite,
                     dst_crs,
+                    lee_window,
                 )
             )
 
@@ -398,6 +430,7 @@ def main():
         help=f"Folder to write GeoTIFFs to; created if missing. Defaults to {NISAR_GEOTIFF_PATH}.",
     )
 
+    add_lee_argument(parser, LEE_WINDOW)
     args = parser.parse_args()
 
     if args.bbox and not args.aoi_name:
@@ -419,6 +452,7 @@ def main():
             args.out_dir,
             args.overwrite,
             args.crs,
+            args.lee,
         )
 
 

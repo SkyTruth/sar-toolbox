@@ -20,6 +20,9 @@ from utils.variables import (
     NISAR_GEOTIFF_PATH,
     NISAR_H5_PATH,
     REPO_ROOT,
+    S1WV_GEOTIFF_PATH,
+    S1WV_GRANULE_CSV_PATH,
+    S1WV_SAFE_PATH,
 )
 
 AOIS_TEMPLATE = """\
@@ -38,7 +41,7 @@ def make_env() -> None:
         print("exists:  .env (left unchanged)")
     else:
         shutil.copy(REPO_ROOT / ".env.default", env)
-        print("created: .env (add your EARTHDATA_TOKEN)")
+        print("created: .env (add your EARTHDATA_TOKEN and CDSE login)")
 
 
 def make_aois() -> None:
@@ -59,6 +62,9 @@ def make_dirs() -> None:
         ALOS2_GRANULE_CSV_PATH,
         ALOS2_TIF_PATH,
         ALOS2_GEOTIFF_PATH,
+        S1WV_GRANULE_CSV_PATH,
+        S1WV_SAFE_PATH,
+        S1WV_GEOTIFF_PATH,
     ):
         if folder.exists():
             print(f"exists:  {folder.relative_to(REPO_ROOT)}")

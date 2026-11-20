@@ -8,6 +8,7 @@ from pyreqwest.client import SyncClientBuilder
 from pyreqwest.exceptions import RequestError
 from tqdm import tqdm
 
+from processing.speckle import add_lee_argument
 from src.alos2_convert_to_tiff import convert_scene_to_geotiff
 from src.alos2_dl import URL_COLUMNS, download_scene, file_name
 from src.alos2_search import construct_s3_search
@@ -18,6 +19,7 @@ from utils.variables import (
     ALOS2_PIXEL_SIZE_M,
     ALOS2_REMOTE_MAX_PIXELS,
     ALOS2_TIF_PATH,
+    LEE_WINDOW,
     SEARCH_AOIS,
 )
 
@@ -67,6 +69,7 @@ def process_scene(
                         out_dir=args.out_dir,
                         overwrite=args.overwrite,
                         dst_crs=args.crs,
+                        lee_window=args.lee,
                     )
                 )
             # Only reached if every polarization converted
@@ -152,6 +155,7 @@ def main() -> None:
         default=4,
         help="Scenes processed in parallel (default: 4). Speeds up remote reads; whole-file downloads share bandwidth.",
     )
+    add_lee_argument(parser, LEE_WINDOW)
     args = parser.parse_args()
     if args.workers < 1:
         parser.error("--workers must be at least 1")

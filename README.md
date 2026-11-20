@@ -5,6 +5,8 @@ A general note on the NISAR data processing described below, nisar_access defaul
 
 It also supports ALOS-2 PALSAR-2 ScanSAR L2.2 imagery from JAXA's public S3 bucket (no login needed); see PALSAR-2 Data Access below.
 
+It also supports Sentinel-1 Wave mode (WV) vignettes over the open ocean from the Copernicus Data Space Ecosystem; see Sentinel-1 Wave Mode (WV) Data Access below.
+
 In time, it will hopefully explore access to other less-utilized NASA data products, such as ICESat-2. 
 
 Where possible it prioritizes the use of Rust-based libraries (e.g. polars, pyreqwest, ruff).
@@ -26,7 +28,7 @@ uv sync --locked
 ```bash
 uv run python -m utils.setup
 ```
-This creates `.env` (from `.env.default`), an empty `utils/aois.py`, `archive/`, and the `data/nisar_*` and `data/alos2_*` folders.
+This creates `.env` (from `.env.default`), an empty `utils/aois.py`, `archive/`, and the `data/nisar_*`, `data/alos2_*` and `data/s1wv_*` folders.
 
 
 Optional: Start Jupyter with the same environment:
@@ -41,11 +43,13 @@ the interpreter under `.venv`.
 
 # Repository Structure
 
-- `src/`: search / download / convert tools, run as modules (see NISAR Data Access and PALSAR-2 Data Access)
+- `src/`: search / download / convert tools, run as modules (see NISAR Data Access, PALSAR-2 Data Access and Sentinel-1 Wave Mode (WV) Data Access)
+- `processing/`: image processing usable with any sensor's data (numpy arrays in, numpy arrays out)
+  - `speckle.py`: Lee speckle filter, used by every converter's `--lee`; works on linear intensity, ignores NaN (no data), and filters large scenes block by block with no seams
 - `utils/aois.py`: private AOIs (git-ignored)
 - `utils/generate_aoi_details.py`: interactive helper that builds an AOI entry
 - `utils/setup.py`: one-time setup; creates `.env`, `utils/aois.py`, `archive/`, and the `data/` folders if missing
-- `utils/variables.py`: shared constants: ASF settings, data paths, per-product H5 layouts, `.env` loading, JAXA/PALSAR-2 settings
+- `utils/variables.py`: shared constants: ASF settings, data paths, per-product H5 layouts, `.env` loading, JAXA/PALSAR-2 settings, CDSE/Sentinel-1 WV settings
 - `data/`: git-ignored except `.gitkeep`
   - `alos2_geotiffs/`: converted PALSAR-2 gamma0 GeoTIFFs
   - `alos2_granule_files/`: granule CSVs from JAXA S3 searches
@@ -54,6 +58,9 @@ the interpreter under `.venv`.
   - `nisar_geotiffs/`: converted GeoTIFFs
   - `nisar_granule_files/`: granule CSVs from ASF searches
   - `nisar_h5_scenes/`: downloaded `.h5` scenes
+  - `s1wv_geotiffs/`: converted Sentinel-1 WV GeoTIFFs (GRD-like DN)
+  - `s1wv_granule_files/`: vignette CSVs from CDSE searches
+  - `s1wv_safe_files/`: downloaded WV vignettes (measurement `.tiff` + XMLs), one folder per product
 - `notebooks/`: Jupyter notebooks (outputs should be stripped before committing)
 - `archive/`: old snippets, miscellaneous code used only in local, throw-away tests (git-ignored)
 
@@ -104,7 +111,7 @@ The code in this repo requires an Earthdata access token. Tokens last 60 days. T
 6. In the `.env` set the `EARTHDATA_TOKEN_DATE` to the date the token was generated
 
 ## Define AOIs
-The search and download features of this repository depend on AOIs, currently defined by bounding boxes. AOI information should be stored in the git-ignored `utils/aois.py`. A few test AOIs (wva-test-area, drc-test-area, indian-ocean-test-area) defined in utils/variables.py are always available; an AOI in aois.py with the same name overrides them. Entry format, either a bounding box or a point with a buffer:
+The search and download features of this repository depend on AOIs, currently defined by bounding boxes. AOI information should be stored in the git-ignored `utils/aois.py`. A few test AOIs (wva-test-area, drc-test-area, indian-ocean-test-area, s1wv-timor-sea-test-area) defined in utils/variables.py are always available; an AOI in aois.py with the same name overrides them. Entry format, either a bounding box or a point with a buffer:
 - `"aoi-name": {"bbox": "min_lon,min_lat,max_lon,max_lat"},`
 - `"aoi-name": {"point": "lon,lat", "buffer_km": 10},`: the bbox is computed as a square `buffer_km` around the point (in the point's UTM zone). If an entry has both, the point and buffer take precedence.
 
@@ -133,6 +140,7 @@ Flags:
 - `--frequency A|B`: Frequency A products are higher resolution, but also larger files. Defaults to Frequency B.
     - Can also be declared as `--freq`
 - `--db`: applies to GSLC/GCOV only.
+- `--lee [WINDOW]`: apply a Lee speckle filter (GSLC/GCOV only), with an optional odd window size (default 5, i.e. 5×5). Adds `_lee<WINDOW>` to the file name. It assumes each product's speckle level, `lee_enl` in `NISAR_PROCESSING_INFO` (GCOV ~4 for frequency A, ~28 for B, measured; GSLC 1). See `processing/speckle.py`.
 - `--crop`: crops the output GeoTIFF to the AOI bbox (defaults to keeping the full scene).
 - `--crs EPSG:CODE`: reprojects the output GeoTIFF, e.g. `EPSG:4326` or `EPSG:3857` (defaults to the scene's own CRS, usually UTM). The code is added to the file name, e.g. `_epsg4326`.
 - `--keep-h5`: by default each downloaded `.h5` is deleted after converting
@@ -176,6 +184,7 @@ Remote reads are many small sequential requests, so their time grows with the pi
     - `--frequency A|B`: defaults to B
         - Can also be declared as `--freq`
     - `--db`
+    - `--lee [WINDOW]`: Lee speckle filter, as above
     - `--bbox MIN_LON MIN_LAT MAX_LON MAX_LAT --aoi-name NAME`: crop, required with bbox. `--h5` also accepts ASF download URLs (the `URL` column of the search CSV), which with `--bbox` reads just that area without downloading the file.
     - `--remove-h5`
     - `--out-dir`
@@ -205,6 +214,7 @@ Flags:
 - `--polarization POL [POL ...]`: `HH` and/or `HV`, one GeoTIFF per polarization (defaults to both)
     - Can also be declared as `--pol`
 - `--db`: write gamma0 in dB
+- `--lee [WINDOW]`: apply a Lee speckle filter, with an optional odd window size (default 5, i.e. 5×5). Adds `_lee<WINDOW>` to the file name. It assumes L2.2's measured speckle level, `ALOS2_LEE_ENL` (9); masked pixels are left out of the filter. See `processing/speckle.py`.
 - `--mask`: set layover, shadow and invalid pixels to NaN (also downloads each scene's `_MSK.tif`)
 - `--crop`: crops the output GeoTIFF to the AOI bbox (defaults to keeping the full scene)
 - `--crs EPSG:CODE`: reprojects the output GeoTIFF, e.g. `EPSG:4326` or `EPSG:3857` (defaults to the scene's own UTM zone). The code is added to the file name, e.g. `_epsg4326`.
@@ -237,6 +247,7 @@ How the data is fetched: JAXA's L2.2 files are Cloud-Optimized GeoTIFFs (~400 MB
     ```
     Flags:
     - `--db`
+    - `--lee [WINDOW]`: Lee speckle filter, as above
     - `--mask`: needs the scene's `_MSK.tif` (download it with `src.alos2_dl --mask`)
     - `--bbox MIN_LON MIN_LAT MAX_LON MAX_LAT --aoi-name NAME`: crop, required with bbox
     - `--remove-tif`
@@ -244,6 +255,69 @@ How the data is fetched: JAXA's L2.2 files are Cloud-Optimized GeoTIFFs (~400 MB
     - `--overwrite`
     - `--crs EPSG:CODE`: reproject the output (defaults to the scene's own UTM zone)
     - `--inspect`: print the tif's profile and tags instead of converting
+
+# Sentinel-1 Wave Mode (WV) Data Access
+Sentinel-1's Wave mode images the open ocean in small "vignettes" of about 20 × 20 km at ~5 m resolution, spaced ~100 km apart along the orbit and alternating between two incidence angles: WV1 (~23°) and WV2 (~37°). WV is only distributed as Level-1 SLC (`WV_SLC__1S`), not GRD, so it isn't in Earth Engine. Vignettes are read from the Copernicus Data Space Ecosystem (CDSE). Searches use the same AOIs as NISAR (see Define AOIs above). All commands below must be run from the repository root.
+
+Each WV product holds up to ~180 vignettes and is several GB, so only the vignettes that intersect the AOI are downloaded (~85–110 MB each), then multilooked and geocoded. Because the vignettes are far apart, a small AOI is often missed entirely; a larger AOI or longer date range helps.
+
+Any product or figure using this data must credit Copernicus (see: `S1WV_ATTRIBUTION` in `utils/variables.py`).
+
+## Set up CDSE Credentials
+Searching needs no login; downloading needs a free CDSE account (https://dataspace.copernicus.eu/). Add your `CDSE_USERNAME` and `CDSE_PASSWORD` to `.env`. CDSE locks an account for a while after many logins in quick succession, so each run logs in once and reuses (and refreshes) that token for every download.
+
+## Processing
+`s1wv_convert_to_tiff` makes each vignette match what [Cerulean](https://github.com/SkyTruth/cerulean-cloud)'s model reads from Sentinel-1 IW GRDH: raw GRD digital numbers (DN), with no calibration, noise removal or speckle filtering.
+
+1. **Multilook** |SLC|² to about IW GRDH resolution (`S1WV_GRD_RESOLUTION_M`, 20 m ground range × 22 m azimuth). Looks come from each vignette's pixel spacing, so WV1 gets fewer range looks than WV2.
+2. **Scale to GRD-like DN.** Both GRD and WV SLC convert DN to β⁰ (radar brightness) with a single constant: β⁰ = DN² / A². So DN_GRD = √(multilooked |SLC|²) × A_GRD / A_SLC, with A_GRD = `S1_GRD_BETA0_CALIBRATION` (474, IW GRDH) and A_SLC from the vignette's calibration file (1001.15 in 2025 files). As in GRD, thermal noise is left in.
+3. **Geocode** onto a north-up UTM grid with `S1WV_PIXEL_SIZE_M` (20 m) pixels, using a thin-plate spline through the annotation's tie points (sea level, so no terrain correction). Written as uint16 with 0 as nodata, like GRD, and named after the vignette's measurement file, e.g. `s1a-wv1-slc-vv-…-001.tif`.
+
+Optional speckle filter, **`--lee [WINDOW]`** (adds `_lee5` to the file name): a Lee filter on linear intensity, in radar geometry before taking the amplitude and geocoding. Neither GRD nor Cerulean filters speckle, so it moves vignettes away from what the model was trained on. It needs the speckle level, as an equivalent number of looks (ENL). The nominal multilook count overstates it because neighbouring SLC pixels are correlated, so ENL is `S1WV_LEE_ENL_FRACTION` (0.35) × the looks (~9 for a WV1 vignette's 5×5); change it in `utils/variables.py` (lower smooths more). On test WV1 vignettes, 5×5 cut speckle about 3× and kept vessel peaks (~0.5 dB lower), but it also damps real swell at wavelengths under ~300 m and partly fills in dark features such as wakes (and so slicks).
+
+Brightness compared with IW GRD: WV2 (~37°) is inside IW's incidence range (30–46°), and its GRD-like DN on open ocean (median ~75–115 in tests) matches IW's. WV1 (~24°) is steeper than any part of an IW swath, so the sea is much brighter (median DN ~220–310) and often above 255, where Cerulean's 0–255 rescale clips it; slicks also show less contrast at WV1's incidence. A few products are HH rather than VV; see the `Polarization` column of the search CSV.
+
+## Search, download, and convert WV data
+
+```bash
+uv run python -m src.s1wv_access --aoi AOI_NAME --sd YYYY-MM-DD --ed YYYY-MM-DD
+```
+Writes GRD-like DN (see Processing above). Flags:
+- `--lee [WINDOW]`: apply a Lee speckle filter, with an optional odd window size (default 5, i.e. 5×5)
+- `--crs EPSG:CODE`: reprojects the output GeoTIFF, e.g. `EPSG:4326` or `EPSG:3857` (defaults to the vignette's UTM zone). The code is added to the file name, e.g. `_epsg4326`.
+- `--keep-slc`: by default each downloaded measurement `.tiff` (~105 MB) is deleted after converting. The small annotation/calibration XMLs are always kept.
+- `--out-dir`: a user defined path to an output directory, if not defined geotiffs will be written to `data/s1wv_geotiffs/`
+- `--overwrite`: reconvert even if the GeoTIFF already exists (downloads the measurement file again if it was deleted)
+- `--workers N`: vignettes processed in parallel (default and maximum 4, CDSE's per-user limit on concurrent downloads)
+
+Vignettes whose GeoTIFF already exists are skipped without downloading. Vignettes in offline (archived) products are listed by the search and skipped.
+
+### Step-by-step runs
+
+1. Search the CDSE catalogue. Writes a CSV file, one row per vignette intersecting the AOI, to `data/s1wv_granule_files/`.
+    ```bash
+    uv run python -m src.s1wv_search --aoi AOI_NAME --sd YYYY-MM-DD --ed YYYY-MM-DD
+    ```
+    OR use an ad-hoc bbox, with an optional `--location` label in the filename:
+    ```bash
+    uv run python -m src.s1wv_search --bbox 'MIN_LON,MIN_LAT,MAX_LON,MAX_LAT' --location LABEL --sd YYYY-MM-DD --ed YYYY-MM-DD
+    ```
+2. Download the vignettes to `data/s1wv_safe_files/<product>/`, laid out like the product's `.SAFE` (measurement `.tiff` plus its annotation and calibration XMLs). Files already on disk are skipped.
+    ```bash
+    uv run python -m src.s1wv_dl --granule-file VIGNETTE_LIST.csv
+    ```
+    `--granule-file` is required; a bare filename is looked up in `data/s1wv_granule_files/`. `--granule NAME [NAME ...]` downloads only vignettes from those products in the CSV.
+3. Convert the measurement files to GRD-like DN GeoTIFFs in `data/s1wv_geotiffs/`. A bare filename is looked up in `data/s1wv_safe_files/*/measurement/`.
+    ```bash
+    uv run python -m src.s1wv_convert_to_tiff --tiff s1a-wv1-slc-vv-...-001.tiff [...]
+    ```
+    Flags:
+    - `--lee [WINDOW]`: Lee speckle filter, as above
+    - `--remove-slc`
+    - `--out-dir`
+    - `--overwrite`
+    - `--crs EPSG:CODE`: reproject the output (defaults to the vignette's UTM zone)
+    - `--inspect`: print the vignette's annotation summary (swath, polarization, incidence, spacing) instead of converting
 
 # License
 This work is licensed under the Apache License, Version 2.0. See LICENSE
