@@ -165,12 +165,10 @@ S1WV_PIXEL_SIZE_M = 20
 # beta0 = DN^2 / 474^2, the same everywhere in the image (from a GRDH calibration file, 2025). WV vignettes are
 # scaled with it to "GRD-like DN", the values Cerulean's model reads from GRD.
 S1_GRD_BETA0_CALIBRATION = 474.0
-# Noise removal (--remove-noise) can leave values at or below zero; sigma0 is floored here (-50 dB) so dB
-# output has no holes
-S1WV_SIGMA0_FLOOR = 1e-5
-# Optional Lee speckle filter (--lee): default window, and its equivalent number of looks (ENL) as a fraction of
-# the multilook count. Neighbouring SLC pixels are correlated, so 5x5 looks act like ~9 independent ones
-# (measured on a WV1 vignette in uniform areas: ENL ~6-10 against a nominal 25)
+# Optional Lee speckle filter (--lee): default window, and the speckle level it assumes, as an equivalent number
+# of looks (ENL) given as a fraction of the multilook count (lower smooths more). Neighbouring SLC pixels are
+# correlated, so 5x5 looks act like ~9 independent ones (measured on a WV1 vignette in uniform areas: ENL ~6-10
+# against a nominal 25)
 S1WV_LEE_WINDOW = 5
 S1WV_LEE_ENL_FRACTION = 0.35
 # A vignette's footprint (catalogue) and its annotation centre further apart than this mean the footprint

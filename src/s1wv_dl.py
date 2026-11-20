@@ -275,17 +275,20 @@ def resolve_vignette(client, auth: CdseAuth, row: dict) -> str:
 def download_vignette(client, auth: CdseAuth, row: dict) -> Path:
     """
     Download one vignette's measurement GeoTIFF (complex int16, radar geometry, ~85-110 MB) and its
-    annotation, calibration and noise XMLs, rather than the whole multi-GB product. Returns the measurement
-    file's path; the XMLs sit beside it in the .SAFE layout, where s1wv_convert_to_tiff finds them.
+    annotation and calibration XMLs, rather than the whole multi-GB product. Returns the measurement file's
+    path; the XMLs sit beside it in the .SAFE layout, where s1wv_convert_to_tiff finds them.
     """
     name, product_id = row["Granule Name"], row["Product Id"]
     tiff = resolve_vignette(client, auth, row)
     stem = tiff.removesuffix(".tiff")
     annotation_path(client, auth, product_id, name, tiff)
-    for xml in (f"calibration-{stem}.xml", f"noise-{stem}.xml"):
-        download_node(
-            client, auth, product_id, name, ["annotation", "calibration", xml]
-        )
+    download_node(
+        client,
+        auth,
+        product_id,
+        name,
+        ["annotation", "calibration", f"calibration-{stem}.xml"],
+    )
     measurement = product_dir(name) / "measurement" / tiff
     if measurement.exists():
         print(f"    Skipping {tiff} (already exists)")

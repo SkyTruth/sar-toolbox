@@ -56,7 +56,7 @@ the interpreter under `.venv`.
   - `nisar_geotiffs/`: converted GeoTIFFs
   - `nisar_granule_files/`: granule CSVs from ASF searches
   - `nisar_h5_scenes/`: downloaded `.h5` scenes
-  - `s1wv_geotiffs/`: converted Sentinel-1 WV sigma0 GeoTIFFs
+  - `s1wv_geotiffs/`: converted Sentinel-1 WV GeoTIFFs (GRD-like DN)
   - `s1wv_granule_files/`: vignette CSVs from CDSE searches
   - `s1wv_safe_files/`: downloaded WV vignettes (measurement `.tiff` + XMLs), one folder per product
 - `notebooks/`: Jupyter notebooks (outputs should be stripped before committing)
@@ -261,17 +261,13 @@ Any product or figure using this data must credit Copernicus (see: `S1WV_ATTRIBU
 Searching needs no login; downloading needs a free CDSE account (https://dataspace.copernicus.eu/). Add your `CDSE_USERNAME` and `CDSE_PASSWORD` to `.env`. CDSE locks an account for a while after many logins in quick succession, so each run logs in once and reuses (and refreshes) that token for every download.
 
 ## Processing
-By default `s1wv_convert_to_tiff` makes each vignette match what [Cerulean](https://github.com/SkyTruth/cerulean-cloud)'s model reads from Sentinel-1 IW GRDH: raw GRD digital numbers (DN), with no calibration, noise removal or speckle filtering. Everything else is opt-in.
+`s1wv_convert_to_tiff` makes each vignette match what [Cerulean](https://github.com/SkyTruth/cerulean-cloud)'s model reads from Sentinel-1 IW GRDH: raw GRD digital numbers (DN), with no calibration, noise removal or speckle filtering.
 
-Default steps:
 1. **Multilook** |SLC|² to about IW GRDH resolution (`S1WV_GRD_RESOLUTION_M`, 20 m ground range × 22 m azimuth). Looks come from each vignette's pixel spacing, so WV1 gets fewer range looks than WV2.
 2. **Scale to GRD-like DN.** Both GRD and WV SLC convert DN to β⁰ (radar brightness) with a single constant: β⁰ = DN² / A². So DN_GRD = √(multilooked |SLC|²) × A_GRD / A_SLC, with A_GRD = `S1_GRD_BETA0_CALIBRATION` (474, IW GRDH) and A_SLC from the vignette's calibration file (1001.15 in 2025 files). As in GRD, thermal noise is left in.
-3. **Geocode** onto a north-up UTM grid with `S1WV_PIXEL_SIZE_M` (20 m) pixels, using a thin-plate spline through the annotation's tie points (sea level, so no terrain correction). Written as uint16 with 0 as nodata, like GRD; file names end `_grddn.tif`.
+3. **Geocode** onto a north-up UTM grid with `S1WV_PIXEL_SIZE_M` (20 m) pixels, using a thin-plate spline through the annotation's tie points (sea level, so no terrain correction). Written as uint16 with 0 as nodata, like GRD, and named after the vignette's measurement file, e.g. `s1a-wv1-slc-vv-…-001.tif`.
 
-Optional processing (flags combine; each adds a tag to the file name, so outputs never overwrite each other):
-- **`--remove-noise` (`_tnr`):** subtract thermal noise (the range noise lookup table), as Earth Engine's `S1_GRD` does. Values left at or below zero are floored (DN at 1, σ⁰ at `S1WV_SIGMA0_FLOOR`, -50 dB).
-- **`--lee [WINDOW]` (`_lee5`):** a Lee speckle filter on linear intensity, in radar geometry before geocoding. Neither GRD nor Cerulean filters speckle. It needs the speckle level, as an equivalent number of looks (ENL). The nominal multilook count overstates it because neighbouring SLC pixels are correlated, so ENL defaults to `S1WV_LEE_ENL_FRACTION` (0.35) × the looks (~9 for a WV1 vignette's 5×5); `--enl` overrides it (lower smooths more). On test WV1 vignettes, 5×5 cut speckle about 3× and kept vessel peaks (~0.5 dB lower), but it also damps real swell at wavelengths under ~300 m and partly fills in dark features such as wakes (and so slicks).
-- **`--sigma0` (`_sigma0` instead of `_grddn`):** calibrated σ⁰ = I / A_σ², with A_σ the `sigmaNought` calibration table, as float32. `--sigma0 --remove-noise` matches Earth Engine's `S1_GRD`. Add **`--db`** (`_dB`, σ⁰ only) for dB.
+Optional speckle filter, **`--lee [WINDOW]`** (adds `_lee5` to the file name): a Lee filter on linear intensity, in radar geometry before taking the amplitude and geocoding. Neither GRD nor Cerulean filters speckle, so it moves vignettes away from what the model was trained on. It needs the speckle level, as an equivalent number of looks (ENL). The nominal multilook count overstates it because neighbouring SLC pixels are correlated, so ENL is `S1WV_LEE_ENL_FRACTION` (0.35) × the looks (~9 for a WV1 vignette's 5×5); change it in `utils/variables.py` (lower smooths more). On test WV1 vignettes, 5×5 cut speckle about 3× and kept vessel peaks (~0.5 dB lower), but it also damps real swell at wavelengths under ~300 m and partly fills in dark features such as wakes (and so slicks).
 
 Brightness compared with IW GRD: WV2 (~37°) is inside IW's incidence range (30–46°), and its GRD-like DN on open ocean (median ~75–115 in tests) matches IW's. WV1 (~24°) is steeper than any part of an IW swath, so the sea is much brighter (median DN ~220–310) and often above 255, where Cerulean's 0–255 rescale clips it; slicks also show less contrast at WV1's incidence. A few products are HH rather than VV; see the `Polarization` column of the search CSV.
 
@@ -280,12 +276,8 @@ Brightness compared with IW GRD: WV2 (~37°) is inside IW's incidence range (30�
 ```bash
 uv run python -m src.s1wv_access --aoi AOI_NAME --sd YYYY-MM-DD --ed YYYY-MM-DD
 ```
-Writes GRD-like DN by default (see Processing above). Flags:
-- `--remove-noise`: subtract thermal noise
+Writes GRD-like DN (see Processing above). Flags:
 - `--lee [WINDOW]`: apply a Lee speckle filter, with an optional odd window size (default 5, i.e. 5×5)
-- `--enl N`: equivalent number of looks for `--lee` (defaults to `S1WV_LEE_ENL_FRACTION` × the multilook count)
-- `--sigma0`: write calibrated σ⁰ instead of GRD-like DN
-- `--db`: write σ⁰ in dB (needs `--sigma0`)
 - `--crs EPSG:CODE`: reprojects the output GeoTIFF, e.g. `EPSG:4326` or `EPSG:3857` (defaults to the vignette's UTM zone). The code is added to the file name, e.g. `_epsg4326`.
 - `--keep-slc`: by default each downloaded measurement `.tiff` (~105 MB) is deleted after converting. The small annotation/calibration XMLs are always kept.
 - `--out-dir`: a user defined path to an output directory, if not defined geotiffs will be written to `data/s1wv_geotiffs/`
@@ -304,17 +296,17 @@ Vignettes whose GeoTIFF already exists are skipped without downloading. Vignette
     ```bash
     uv run python -m src.s1wv_search --bbox 'MIN_LON,MIN_LAT,MAX_LON,MAX_LAT' --location LABEL --sd YYYY-MM-DD --ed YYYY-MM-DD
     ```
-2. Download the vignettes to `data/s1wv_safe_files/<product>/`, laid out like the product's `.SAFE` (measurement `.tiff` plus its annotation, calibration and noise XMLs). Files already on disk are skipped.
+2. Download the vignettes to `data/s1wv_safe_files/<product>/`, laid out like the product's `.SAFE` (measurement `.tiff` plus its annotation and calibration XMLs). Files already on disk are skipped.
     ```bash
     uv run python -m src.s1wv_dl --granule-file VIGNETTE_LIST.csv
     ```
     `--granule-file` is required; a bare filename is looked up in `data/s1wv_granule_files/`. `--granule NAME [NAME ...]` downloads only vignettes from those products in the CSV.
-3. Convert the measurement files to GeoTIFFs (GRD-like DN by default) in `data/s1wv_geotiffs/`. A bare filename is looked up in `data/s1wv_safe_files/*/measurement/`.
+3. Convert the measurement files to GRD-like DN GeoTIFFs in `data/s1wv_geotiffs/`. A bare filename is looked up in `data/s1wv_safe_files/*/measurement/`.
     ```bash
     uv run python -m src.s1wv_convert_to_tiff --tiff s1a-wv1-slc-vv-...-001.tiff [...]
     ```
     Flags:
-    - `--remove-noise`, `--lee [WINDOW]`, `--enl N`, `--sigma0`, `--db`: optional processing, as above
+    - `--lee [WINDOW]`: Lee speckle filter, as above
     - `--remove-slc`
     - `--out-dir`
     - `--overwrite`
