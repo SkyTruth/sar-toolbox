@@ -161,8 +161,18 @@ S1WV_PRODUCT_TYPE = "WV_SLC__1S"  # WV is only distributed as SLC (and L2 OCN), 
 S1WV_GRD_RESOLUTION_M = (20, 22)
 # Pixel size of the geocoded (UTM) output; about the resolution after multilooking
 S1WV_PIXEL_SIZE_M = 20
-# Noise subtraction can leave sigma0 at or below zero; floored here (-50 dB) so dB output has no holes
+# Calibration constant IW GRDH products use to convert their DN to beta0 (radar brightness):
+# beta0 = DN^2 / 474^2, the same everywhere in the image (from a GRDH calibration file, 2025). WV vignettes are
+# scaled with it to "GRD-like DN", the values Cerulean's model reads from GRD.
+S1_GRD_BETA0_CALIBRATION = 474.0
+# Noise removal (--remove-noise) can leave values at or below zero; sigma0 is floored here (-50 dB) so dB
+# output has no holes
 S1WV_SIGMA0_FLOOR = 1e-5
+# Optional Lee speckle filter (--lee): default window, and its equivalent number of looks (ENL) as a fraction of
+# the multilook count. Neighbouring SLC pixels are correlated, so 5x5 looks act like ~9 independent ones
+# (measured on a WV1 vignette in uniform areas: ENL ~6-10 against a nominal 25)
+S1WV_LEE_WINDOW = 5
+S1WV_LEE_ENL_FRACTION = 0.35
 # A vignette's footprint (catalogue) and its annotation centre further apart than this mean the footprint
 # order and the file order disagree; every vignette is then located from its annotation instead
 S1WV_MAX_PAIRING_OFFSET_KM = 50

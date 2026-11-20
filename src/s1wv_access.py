@@ -9,7 +9,12 @@ import polars as pl
 from pyreqwest.exceptions import RequestError
 from tqdm import tqdm
 
-from src.s1wv_convert_to_tiff import convert_vignette_to_geotiff, output_path
+from src.s1wv_convert_to_tiff import (
+    add_processing_arguments,
+    check_processing_arguments,
+    convert_vignette_to_geotiff,
+    output_path,
+)
 from src.s1wv_dl import CdseAuth, cdse_client, download_vignette, resolve_vignette
 from src.s1wv_search import construct_cdse_search
 from utils.geometry import epsg_crs
@@ -32,7 +37,15 @@ def process_vignette(
         try:
             # Already converted: skip the ~100 MB download (the SLC is usually deleted after converting)
             tiff_name = resolve_vignette(client, auth, row)
-            out_path = output_path(tiff_name, args.db, args.out_dir, args.crs)
+            out_path = output_path(
+                tiff_name,
+                args.out_dir,
+                args.sigma0,
+                args.remove_noise,
+                args.lee,
+                args.db,
+                args.crs,
+            )
             if out_path.exists() and not args.overwrite:
                 print(f"    Skipping {out_path.name} (already exists)")
                 return out_path, None, output.getvalue()
@@ -41,10 +54,14 @@ def process_vignette(
             tif = convert_vignette_to_geotiff(
                 tiff,
                 remove_slc=not args.keep_slc,
-                db=args.db,
                 out_dir=args.out_dir,
                 overwrite=args.overwrite,
                 dst_crs=args.crs,
+                sigma0=args.sigma0,
+                remove_noise=args.remove_noise,
+                lee_window=args.lee,
+                enl=args.enl,
+                db=args.db,
             )
 
         # Same failure types the standalone batch loops catch, so one bad vignette doesn't stop the run
@@ -55,7 +72,8 @@ def process_vignette(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Search, download and convert Sentinel-1 WV vignettes for a saved AOI in one run."
+        description="Search, download and convert Sentinel-1 WV vignettes for a saved AOI in one run. Writes "
+        "GRD-like DN by default (what Cerulean's model reads); other processing is opt-in."
     )
     parser.add_argument(
         "--aoi",
@@ -72,9 +90,6 @@ def main() -> None:
         dest="end",
         required=True,
         help="End Date: YYYY-MM-DD (inclusive)",
-    )
-    parser.add_argument(
-        "--db", action="store_true", help="Write sigma0 in dB (10*log10)."
     )
     parser.add_argument(
         "--keep-slc",
@@ -106,7 +121,9 @@ def main() -> None:
         help=f"Vignettes processed in parallel (default: {CDSE_MAX_DOWNLOADS}). CDSE allows "
         f"{CDSE_MAX_DOWNLOADS} concurrent downloads per user, so more doesn't help.",
     )
+    add_processing_arguments(parser)
     args = parser.parse_args()
+    check_processing_arguments(parser, args)
     if not 1 <= args.workers <= CDSE_MAX_DOWNLOADS:
         parser.error(
             f"--workers must be between 1 and {CDSE_MAX_DOWNLOADS} (CDSE's per-user download limit)"
