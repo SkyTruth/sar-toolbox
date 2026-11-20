@@ -5,6 +5,8 @@ A general note on the NISAR data processing described below, nisar_access defaul
 
 It also supports ALOS-2 PALSAR-2 ScanSAR L2.2 imagery from JAXA's public S3 bucket (no login needed); see PALSAR-2 Data Access below.
 
+It also supports Sentinel-1 Wave mode (WV) vignettes over the open ocean from the Copernicus Data Space Ecosystem; see Sentinel-1 Wave Mode (WV) Data Access below.
+
 In time, it will hopefully explore access to other less-utilized NASA data products, such as ICESat-2. 
 
 Where possible it prioritizes the use of Rust-based libraries (e.g. polars, pyreqwest, ruff).
@@ -26,7 +28,7 @@ uv sync --locked
 ```bash
 uv run python -m utils.setup
 ```
-This creates `.env` (from `.env.default`), an empty `utils/aois.py`, `archive/`, and the `data/nisar_*` and `data/alos2_*` folders.
+This creates `.env` (from `.env.default`), an empty `utils/aois.py`, `archive/`, and the `data/nisar_*`, `data/alos2_*` and `data/s1wv_*` folders.
 
 
 Optional: Start Jupyter with the same environment:
@@ -41,11 +43,11 @@ the interpreter under `.venv`.
 
 # Repository Structure
 
-- `src/`: search / download / convert tools, run as modules (see NISAR Data Access and PALSAR-2 Data Access)
+- `src/`: search / download / convert tools, run as modules (see NISAR Data Access, PALSAR-2 Data Access and Sentinel-1 Wave Mode (WV) Data Access)
 - `utils/aois.py`: private AOIs (git-ignored)
 - `utils/generate_aoi_details.py`: interactive helper that builds an AOI entry
 - `utils/setup.py`: one-time setup; creates `.env`, `utils/aois.py`, `archive/`, and the `data/` folders if missing
-- `utils/variables.py`: shared constants: ASF settings, data paths, per-product H5 layouts, `.env` loading, JAXA/PALSAR-2 settings
+- `utils/variables.py`: shared constants: ASF settings, data paths, per-product H5 layouts, `.env` loading, JAXA/PALSAR-2 settings, CDSE/Sentinel-1 WV settings
 - `data/`: git-ignored except `.gitkeep`
   - `alos2_geotiffs/`: converted PALSAR-2 gamma0 GeoTIFFs
   - `alos2_granule_files/`: granule CSVs from JAXA S3 searches
@@ -54,6 +56,9 @@ the interpreter under `.venv`.
   - `nisar_geotiffs/`: converted GeoTIFFs
   - `nisar_granule_files/`: granule CSVs from ASF searches
   - `nisar_h5_scenes/`: downloaded `.h5` scenes
+  - `s1wv_geotiffs/`: converted Sentinel-1 WV sigma0 GeoTIFFs
+  - `s1wv_granule_files/`: vignette CSVs from CDSE searches
+  - `s1wv_safe_files/`: downloaded WV vignettes (measurement `.tiff` + XMLs), one folder per product
 - `notebooks/`: Jupyter notebooks (outputs should be stripped before committing)
 - `archive/`: old snippets, miscellaneous code used only in local, throw-away tests (git-ignored)
 
@@ -244,6 +249,66 @@ How the data is fetched: JAXA's L2.2 files are Cloud-Optimized GeoTIFFs (~400 MB
     - `--overwrite`
     - `--crs EPSG:CODE`: reproject the output (defaults to the scene's own UTM zone)
     - `--inspect`: print the tif's profile and tags instead of converting
+
+# Sentinel-1 Wave Mode (WV) Data Access
+Sentinel-1's Wave mode images the open ocean in small "vignettes" of about 20 × 20 km at ~5 m resolution, spaced ~100 km apart along the orbit and alternating between two incidence angles: WV1 (~23°) and WV2 (~37°). WV is only distributed as Level-1 SLC (`WV_SLC__1S`), not GRD, so it isn't in Earth Engine. Vignettes are read from the Copernicus Data Space Ecosystem (CDSE). Searches use the same AOIs as NISAR (see Define AOIs above). All commands below must be run from the repository root.
+
+Each WV product holds up to ~180 vignettes and is several GB, so only the vignettes that intersect the AOI are downloaded (~85–110 MB each), then calibrated to σ⁰ and geocoded. Because the vignettes are far apart, a small AOI is often missed entirely; a larger AOI or longer date range helps.
+
+Any product or figure using this data must credit Copernicus (see: `S1WV_ATTRIBUTION` in `utils/variables.py`).
+
+## Set up CDSE Credentials
+Searching needs no login; downloading needs a free CDSE account (https://dataspace.copernicus.eu/). Add your `CDSE_USERNAME` and `CDSE_PASSWORD` to `.env`. CDSE locks an account for a while after many logins in quick succession, so each run logs in once and reuses (and refreshes) that token for every download.
+
+## Processing
+`s1wv_convert_to_tiff` makes each vignette look like Sentinel-1 IW GRDH (what Earth Engine's `S1_GRD` holds):
+1. **Calibrate:** noise-subtracted σ⁰ = (|DN|² − N) / A², with N the range noise LUT and A the `sigmaNought` calibration LUT, as in `S1_GRD`. Values left at or below zero are floored at `S1WV_SIGMA0_FLOOR` (-50 dB).
+2. **Multilook** to about IW GRDH resolution (`S1WV_GRD_RESOLUTION_M`, 20 m ground range × 22 m azimuth). Looks come from each vignette's pixel spacing, so WV1 gets fewer range looks than WV2.
+3. **Geocode** onto a north-up UTM grid with `S1WV_PIXEL_SIZE_M` (20 m) pixels, using a thin-plate spline through the annotation's tie points (sea level, so no terrain correction).
+
+WV1's steeper incidence makes the sea ~9 dB brighter than WV2 (and slicks show less contrast). A few products are HH rather than VV; see the `Polarization` column of the search CSV.
+
+## Search, download, and convert WV data
+
+```bash
+uv run python -m src.s1wv_access --aoi AOI_NAME --sd YYYY-MM-DD --ed YYYY-MM-DD
+```
+Flags:
+- `--db`: write σ⁰ in dB
+- `--crs EPSG:CODE`: reprojects the output GeoTIFF, e.g. `EPSG:4326` or `EPSG:3857` (defaults to the vignette's UTM zone). The code is added to the file name, e.g. `_epsg4326`.
+- `--keep-slc`: by default each downloaded measurement `.tiff` (~105 MB) is deleted after converting. The small annotation/calibration XMLs are always kept.
+- `--out-dir`: a user defined path to an output directory, if not defined geotiffs will be written to `data/s1wv_geotiffs/`
+- `--overwrite`: reconvert even if the GeoTIFF already exists (downloads the measurement file again if it was deleted)
+- `--workers N`: vignettes processed in parallel (default and maximum 4, CDSE's per-user limit on concurrent downloads)
+
+Vignettes whose GeoTIFF already exists are skipped without downloading. Vignettes in offline (archived) products are listed by the search and skipped.
+
+### Step-by-step runs
+
+1. Search the CDSE catalogue. Writes a CSV file, one row per vignette intersecting the AOI, to `data/s1wv_granule_files/`.
+    ```bash
+    uv run python -m src.s1wv_search --aoi AOI_NAME --sd YYYY-MM-DD --ed YYYY-MM-DD
+    ```
+    OR use an ad-hoc bbox, with an optional `--location` label in the filename:
+    ```bash
+    uv run python -m src.s1wv_search --bbox 'MIN_LON,MIN_LAT,MAX_LON,MAX_LAT' --location LABEL --sd YYYY-MM-DD --ed YYYY-MM-DD
+    ```
+2. Download the vignettes to `data/s1wv_safe_files/<product>/`, laid out like the product's `.SAFE` (measurement `.tiff` plus its annotation, calibration and noise XMLs). Files already on disk are skipped.
+    ```bash
+    uv run python -m src.s1wv_dl --granule-file VIGNETTE_LIST.csv
+    ```
+    `--granule-file` is required; a bare filename is looked up in `data/s1wv_granule_files/`. `--granule NAME [NAME ...]` downloads only vignettes from those products in the CSV.
+3. Convert the measurement files to σ⁰ GeoTIFFs in `data/s1wv_geotiffs/`. A bare filename is looked up in `data/s1wv_safe_files/*/measurement/`.
+    ```bash
+    uv run python -m src.s1wv_convert_to_tiff --tiff s1a-wv1-slc-vv-...-001.tiff [...]
+    ```
+    Flags:
+    - `--db`
+    - `--remove-slc`
+    - `--out-dir`
+    - `--overwrite`
+    - `--crs EPSG:CODE`: reproject the output (defaults to the vignette's UTM zone)
+    - `--inspect`: print the vignette's annotation summary (swath, polarization, incidence, spacing) instead of converting
 
 # License
 This work is licensed under the Apache License, Version 2.0. See LICENSE

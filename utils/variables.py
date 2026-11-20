@@ -136,3 +136,32 @@ ALOS2_PIXEL_SIZE_M = 25
 # Timed at ~24 MB/s from JAXA's bucket: remote ~1.3 s + 0.42 s per Mpx vs ~17 s download + 0.18 s per Mpx convert,
 # so they break even near 65 Mpx per file. 50 Mpx (~175 km box at 25 m) leaves margin for faster downloads.
 ALOS2_REMOTE_MAX_PIXELS = 50_000_000
+
+
+# SENTINEL-1 WAVE MODE (WV) VARIABLES
+# WV SLC vignettes from the Copernicus Data Space Ecosystem (CDSE)
+CDSE_USERNAME = os.getenv("CDSE_USERNAME")
+CDSE_PASSWORD = os.getenv("CDSE_PASSWORD")
+CDSE_CATALOGUE_URL = "https://catalogue.dataspace.copernicus.eu/odata/v1"
+CDSE_DOWNLOAD_URL = "https://download.dataspace.copernicus.eu/odata/v1"
+CDSE_TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+# CDSE allows at most 4 concurrent downloads per user
+CDSE_MAX_DOWNLOADS = 4
+
+S1WV_GRANULE_CSV_PATH = DATA_DIRECTORY / "s1wv_granule_files"
+S1WV_SAFE_PATH = (
+    DATA_DIRECTORY / "s1wv_safe_files"
+)  # per-product folders, laid out like the .SAFE
+S1WV_GEOTIFF_PATH = DATA_DIRECTORY / "s1wv_geotiffs"
+
+S1WV_PRODUCT_TYPE = "WV_SLC__1S"  # WV is only distributed as SLC (and L2 OCN), not GRD
+# Multilook to about the resolution of IW GRDH (ground range, azimuth), so vignettes look like S1 GRD
+S1WV_GRD_RESOLUTION_M = (20, 22)
+# Pixel size of the geocoded (UTM) output; about the resolution after multilooking
+S1WV_PIXEL_SIZE_M = 20
+# Noise subtraction can leave sigma0 at or below zero; floored here (-50 dB) so dB output has no holes
+S1WV_SIGMA0_FLOOR = 1e-5
+# A vignette's footprint (catalogue) and its annotation centre further apart than this mean the footprint
+# order and the file order disagree; every vignette is then located from its annotation instead
+S1WV_MAX_PAIRING_OFFSET_KM = 50
+S1WV_ATTRIBUTION = "Contains modified Copernicus Sentinel data"
