@@ -109,7 +109,7 @@ The code in this repo requires an Earthdata access token. Tokens last 60 days. T
 6. In the `.env` set the `EARTHDATA_TOKEN_DATE` to the date the token was generated
 
 ## Define AOIs
-The search and download features of this repository depend on AOIs, currently defined by bounding boxes. AOI information should be stored in the git-ignored `utils/aois.py`. A few test AOIs (wva-test-area, drc-test-area, indian-ocean-test-area) defined in utils/variables.py are always available; an AOI in aois.py with the same name overrides them. Entry format, either a bounding box or a point with a buffer:
+The search and download features of this repository depend on AOIs, currently defined by bounding boxes. AOI information should be stored in the git-ignored `utils/aois.py`. A few test AOIs (wva-test-area, drc-test-area, indian-ocean-test-area, s1wv-timor-sea-test-area) defined in utils/variables.py are always available; an AOI in aois.py with the same name overrides them. Entry format, either a bounding box or a point with a buffer:
 - `"aoi-name": {"bbox": "min_lon,min_lat,max_lon,max_lat"},`
 - `"aoi-name": {"point": "lon,lat", "buffer_km": 10},`: the bbox is computed as a square `buffer_km` around the point (in the point's UTM zone). If an entry has both, the point and buffer take precedence.
 

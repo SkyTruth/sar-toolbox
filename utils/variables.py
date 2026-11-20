@@ -88,6 +88,8 @@ SEARCH_AOIS = {
     "drc-test-area": {"bbox": "11.173938,-6.499376,11.718339,-5.954592"},
     "indian-ocean-test-area": {"bbox": "87.547812,5.546815,88.452932,6.45293"},
     "leaky-infrastructure-70111": {"point": "5.312,4.803", "buffer_km": 20},
+    # Timor Sea, off NW Australia: a Sentinel-1 WV1 vignette repeats here every 12 days (S1A, 2025)
+    "s1wv-timor-sea-test-area": {"point": "116.596,-12.772", "buffer_km": 10},
 }
 
 # Import AOIs from git-ignored file (utils/aois.py); same names override the test ones
