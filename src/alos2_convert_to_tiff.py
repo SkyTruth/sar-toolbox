@@ -12,14 +12,17 @@ from rasterio.warp import transform_bounds
 from rasterio.windows import Window, from_bounds
 from rasterio.windows import transform as window_transform
 
+from processing.speckle import add_lee_argument, lee_filter_block
 from src.nisar_convert_to_tiff import is_url, reproject_tif, to_output
 from utils.geometry import epsg_crs
 from utils.variables import (
     ALOS2_ATTRIBUTION,
     ALOS2_CAL_DB,
     ALOS2_GEOTIFF_PATH,
+    ALOS2_LEE_ENL,
     ALOS2_MASK_DROP,
     ALOS2_TIF_PATH,
+    LEE_WINDOW,
 )
 
 # e.g. ALOS2585563700-250327_WBDR2.2GUD_HH_SLP -> scene ID, polarization
@@ -68,12 +71,14 @@ def convert_scene_to_geotiff(
     out_dir: Path | str = ALOS2_GEOTIFF_PATH,
     overwrite: bool = False,
     dst_crs: str | None = None,
+    lee_window: int | None = None,
 ) -> Path:
     """
     Convert a single, specified PALSAR-2 L2.2 HH/HV GeoTIFF (DN) to a calibrated gamma0 GeoTIFF.
     tif_path can also be a JAXA download URL, read remotely without downloading the whole file
     (worthwhile with a bbox, since only the cropped tiles are fetched). The mask is always a local file.
     dst_crs (e.g. "EPSG:4326") reprojects the output; by default it stays on the scene's UTM grid.
+    lee_window (odd, e.g. 5) applies a Lee speckle filter with ENL ALOS2_LEE_ENL; masked pixels are left out.
     """
 
     remote = is_url(tif_path)
@@ -96,6 +101,8 @@ def convert_scene_to_geotiff(
 
     # Name the output after the input so different scenes never overwrite each other
     suffix = "gamma0"
+    if lee_window:
+        suffix += f"_lee{lee_window}"
     if db:
         suffix += "_dB"
     if mask:
@@ -162,15 +169,35 @@ def convert_scene_to_geotiff(
                 predictor=3,
                 BIGTIFF="yes",
             ) as dst:
-                # Write in row blocks so the full array never has to fit in memory
-                for r in range(0, h, 2048):
-                    n = min(2048, h - r)
-                    read_win = Window(c_off, r_off + r, w, n)
+
+                def read_gamma0(r0, r1, c0, c1):
+                    """Linear gamma0 for rows r0:r1, columns c0:c1, with masked pixels NaN."""
+                    read_win = Window(c0, r0, c1 - c0, r1 - r0)
                     block = dn_to_gamma0(src.read(1, window=read_win))
                     if msk is not None:
                         block[
                             np.isin(msk.read(1, window=read_win), ALOS2_MASK_DROP)
                         ] = np.nan
+                    return block
+
+                # Write in row blocks so the full array never has to fit in memory
+                for r in range(0, h, 2048):
+                    n = min(2048, h - r)
+                    if lee_window:
+                        # Read with a margin so block edges are filtered as in the whole scene
+                        block = lee_filter_block(
+                            read_gamma0,
+                            r_off + r,
+                            n,
+                            c_off,
+                            w,
+                            src.height,
+                            src.width,
+                            lee_window,
+                            ALOS2_LEE_ENL,
+                        ).astype("float32")
+                    else:
+                        block = read_gamma0(r_off + r, r_off + r + n, c_off, c_off + w)
                     # When reprojecting, keep values linear here; reproject_tif converts to dB after resampling
                     dst.write(
                         to_output(block, db and not warp), 1, window=Window(0, r, w, n)
@@ -182,6 +209,9 @@ def convert_scene_to_geotiff(
                     POLARIZATION=polarization,
                     UNITS="gamma0 (dB)" if db else "gamma0 (linear power)",
                     CALIBRATION="gamma0 = DN^2 * 10^(-8.3)",
+                    SPECKLE_FILTER=f"Lee {lee_window}x{lee_window}, ENL {ALOS2_LEE_ENL}"
+                    if lee_window
+                    else "none",
                 )
 
             # reproject_tif copies these tags over; UNITS follows db, so it's right after reprojecting too
@@ -222,6 +252,7 @@ def convert_scenes_to_geotiff(
     out_dir: Path | str = ALOS2_GEOTIFF_PATH,
     overwrite: bool = False,
     dst_crs: str | None = None,
+    lee_window: int | None = None,
 ) -> list[Path]:
     """
     Convert a list of PALSAR-2 L2.2 tifs to calibrated GeoTIFFs.
@@ -243,6 +274,7 @@ def convert_scenes_to_geotiff(
                     out_dir,
                     overwrite,
                     dst_crs,
+                    lee_window,
                 )
             )
 
@@ -319,6 +351,7 @@ def main():
         help=f"Folder to write GeoTIFFs to; created if missing. Defaults to {ALOS2_GEOTIFF_PATH}.",
     )
 
+    add_lee_argument(parser, LEE_WINDOW)
     args = parser.parse_args()
 
     if args.bbox and not args.aoi_name:
@@ -345,6 +378,7 @@ def main():
             args.out_dir,
             args.overwrite,
             args.crs,
+            args.lee,
         )
 
 

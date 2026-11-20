@@ -8,6 +8,7 @@ from pyreqwest.client import SyncClientBuilder
 from pyreqwest.exceptions import RequestError
 from tqdm import tqdm
 
+from processing.speckle import add_lee_argument
 from src.asf_sar_search import construct_api_search
 from src.nisar_convert_to_tiff import convert_scene_to_geotiff
 from src.nisar_dl import download_scene
@@ -15,6 +16,7 @@ from utils.geometry import crop_pixels, epsg_crs
 from utils.variables import (
     ASF_DEFAULT_PROCESSING_LEVEL,
     EARTHDATA_TOKEN,
+    LEE_WINDOW,
     NISAR_GCOV_PIXEL_SIZE_M,
     NISAR_GCOV_SCENE_SIZE_M,
     NISAR_GEOTIFF_PATH,
@@ -63,6 +65,7 @@ def process_scene(
                         out_dir=args.out_dir,
                         overwrite=args.overwrite,
                         dst_crs=args.crs,
+                        lee_window=args.lee,
                     )
                 )
             # Only reached if every polarization converted; deletes any local .h5 used (not a remote read), as before
@@ -155,6 +158,7 @@ def main() -> None:
         help="Scenes processed in parallel (default: 4). Speeds up remote reads near-linearly; whole-file "
         "downloads share bandwidth, so gain little and each needs ~6 GB of disk at once.",
     )
+    add_lee_argument(parser, LEE_WINDOW)
     args = parser.parse_args()
     if args.workers < 1:
         parser.error("--workers must be at least 1")

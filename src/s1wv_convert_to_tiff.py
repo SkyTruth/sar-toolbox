@@ -9,16 +9,16 @@ from rasterio.crs import CRS
 from rasterio.enums import Resampling
 from rasterio.warp import calculate_default_transform, reproject
 
-from processing.speckle import lee_filter
+from processing.speckle import add_lee_argument, lee_filter
 from src.s1wv_dl import read_annotation
 from utils.geometry import epsg_crs
 from utils.variables import (
+    LEE_WINDOW,
     S1_GRD_BETA0_CALIBRATION,
     S1WV_ATTRIBUTION,
     S1WV_GEOTIFF_PATH,
     S1WV_GRD_RESOLUTION_M,
     S1WV_LEE_ENL_FRACTION,
-    S1WV_LEE_WINDOW,
     S1WV_PIXEL_SIZE_M,
     S1WV_SAFE_PATH,
 )
@@ -316,27 +316,6 @@ def convert_vignettes_to_geotiff(
     return tifs
 
 
-def odd_window(value: str) -> int:
-    """argparse type for --lee: an odd window size of at least 3."""
-    n = int(value)
-    if n < 3 or n % 2 == 0:
-        raise argparse.ArgumentTypeError(f"must be odd and at least 3, not {n}")
-    return n
-
-
-def add_lee_argument(parser: argparse.ArgumentParser) -> None:
-    """--lee, shared by s1wv_convert_to_tiff and s1wv_access."""
-    parser.add_argument(
-        "--lee",
-        nargs="?",
-        const=S1WV_LEE_WINDOW,
-        type=odd_window,
-        metavar="WINDOW",
-        help=f"Apply a Lee speckle filter (GRD and Cerulean don't); optional odd window size (default "
-        f"{S1WV_LEE_WINDOW}, i.e. {S1WV_LEE_WINDOW}x{S1WV_LEE_WINDOW}). Adds _lee<WINDOW> to the file name.",
-    )
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Convert downloaded Sentinel-1 WV vignettes (SLC) to geocoded GeoTIFFs of GRD-like DN, "
@@ -379,7 +358,7 @@ def main():
         default=S1WV_GEOTIFF_PATH,
         help=f"Folder to write GeoTIFFs to; created if missing. Defaults to {S1WV_GEOTIFF_PATH}.",
     )
-    add_lee_argument(parser)
+    add_lee_argument(parser, LEE_WINDOW)
 
     args = parser.parse_args()
 

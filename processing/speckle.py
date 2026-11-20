@@ -5,9 +5,11 @@ Functions take a 2D numpy array of linear intensity (power: |SLC|^2, sigma0, gam
 amplitude or dB, so convert before filtering and take dB afterwards. NaN marks no data: it's left out of every
 window's statistics and stays NaN in the output, so scene edges don't bleed into valid pixels.
 
-Large scenes (e.g. a full NISAR frame) can be filtered block by block: give each block a margin of
-window // 2 pixels on every side, filter it, and keep only the block's interior.
+Large scenes (e.g. a full NISAR frame) are filtered block by block with lee_filter_block, which reads a margin
+of window // 2 pixels around each block so the result matches filtering the whole scene at once.
 """
+
+import argparse
 
 import numpy as np
 
@@ -56,3 +58,49 @@ def lee_filter(intensity, window: int, enl: float):
     with np.errstate(divide="ignore", invalid="ignore"):
         k = np.clip(np.where(var > 0, var_x / var, 0), 0, 1)
     return mean + k * (intensity - mean)
+
+
+def lee_filter_block(
+    read,
+    row0: int,
+    nrows: int,
+    col0: int,
+    ncols: int,
+    height: int,
+    width: int,
+    window: int,
+    enl: float,
+):
+    """
+    Lee-filter rows row0:row0+nrows and columns col0:col0+ncols of an image too large to filter at once.
+    read(r0, r1, c0, c1) must return linear intensity for rows r0:r1 and columns c0:c1 (NaN for no data);
+    it's called once, for the block plus a margin of window // 2 pixels on every side (clipped to the
+    height x width image), so pixels at the block's edges see the same neighbours as when filtering the whole
+    image. Returns the filtered block (nrows x ncols, float64).
+    """
+    m = window // 2
+    r0, r1 = max(row0 - m, 0), min(row0 + nrows + m, height)
+    c0, c1 = max(col0 - m, 0), min(col0 + ncols + m, width)
+    filtered = lee_filter(read(r0, r1, c0, c1), window, enl)
+    return filtered[row0 - r0 : row0 - r0 + nrows, col0 - c0 : col0 - c0 + ncols]
+
+
+def odd_window(value: str) -> int:
+    """argparse type for --lee: an odd window size of at least 3."""
+    n = int(value)
+    if n < 3 or n % 2 == 0:
+        raise argparse.ArgumentTypeError(f"must be odd and at least 3, not {n}")
+    return n
+
+
+def add_lee_argument(parser: argparse.ArgumentParser, default_window: int) -> None:
+    """--lee [WINDOW], shared by every sensor's convert and access scripts."""
+    parser.add_argument(
+        "--lee",
+        nargs="?",
+        const=default_window,
+        type=odd_window,
+        metavar="WINDOW",
+        help=f"Apply a Lee speckle filter; optional odd window size (default {default_window}, i.e. "
+        f"{default_window}x{default_window}). Adds _lee<WINDOW> to the file name.",
+    )

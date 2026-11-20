@@ -9,15 +9,17 @@ import polars as pl
 from pyreqwest.exceptions import RequestError
 from tqdm import tqdm
 
-from src.s1wv_convert_to_tiff import (
-    add_lee_argument,
-    convert_vignette_to_geotiff,
-    output_path,
-)
+from processing.speckle import add_lee_argument
+from src.s1wv_convert_to_tiff import convert_vignette_to_geotiff, output_path
 from src.s1wv_dl import CdseAuth, cdse_client, download_vignette, resolve_vignette
 from src.s1wv_search import construct_cdse_search
 from utils.geometry import epsg_crs
-from utils.variables import CDSE_MAX_DOWNLOADS, S1WV_GEOTIFF_PATH, SEARCH_AOIS
+from utils.variables import (
+    CDSE_MAX_DOWNLOADS,
+    LEE_WINDOW,
+    S1WV_GEOTIFF_PATH,
+    SEARCH_AOIS,
+)
 
 
 def process_vignette(
@@ -108,7 +110,7 @@ def main() -> None:
         help=f"Vignettes processed in parallel (default: {CDSE_MAX_DOWNLOADS}). CDSE allows "
         f"{CDSE_MAX_DOWNLOADS} concurrent downloads per user, so more doesn't help.",
     )
-    add_lee_argument(parser)
+    add_lee_argument(parser, LEE_WINDOW)
     args = parser.parse_args()
     if not 1 <= args.workers <= CDSE_MAX_DOWNLOADS:
         parser.error(

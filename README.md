@@ -45,7 +45,7 @@ the interpreter under `.venv`.
 
 - `src/`: search / download / convert tools, run as modules (see NISAR Data Access, PALSAR-2 Data Access and Sentinel-1 Wave Mode (WV) Data Access)
 - `processing/`: image processing usable with any sensor's data (numpy arrays in, numpy arrays out)
-  - `speckle.py`: Lee speckle filter (used by `s1wv_convert_to_tiff --lee`); works on linear intensity and ignores NaN (no data)
+  - `speckle.py`: Lee speckle filter, used by every converter's `--lee`; works on linear intensity, ignores NaN (no data), and filters large scenes block by block with no seams
 - `utils/aois.py`: private AOIs (git-ignored)
 - `utils/generate_aoi_details.py`: interactive helper that builds an AOI entry
 - `utils/setup.py`: one-time setup; creates `.env`, `utils/aois.py`, `archive/`, and the `data/` folders if missing
@@ -140,6 +140,7 @@ Flags:
 - `--frequency A|B`: Frequency A products are higher resolution, but also larger files. Defaults to Frequency B.
     - Can also be declared as `--freq`
 - `--db`: applies to GSLC/GCOV only.
+- `--lee [WINDOW]`: apply a Lee speckle filter (GSLC/GCOV only), with an optional odd window size (default 5, i.e. 5×5). Adds `_lee<WINDOW>` to the file name. It assumes each product's speckle level, `lee_enl` in `NISAR_PROCESSING_INFO` (GCOV ~4 for frequency A, ~28 for B, measured; GSLC 1). See `processing/speckle.py`.
 - `--crop`: crops the output GeoTIFF to the AOI bbox (defaults to keeping the full scene).
 - `--crs EPSG:CODE`: reprojects the output GeoTIFF, e.g. `EPSG:4326` or `EPSG:3857` (defaults to the scene's own CRS, usually UTM). The code is added to the file name, e.g. `_epsg4326`.
 - `--keep-h5`: by default each downloaded `.h5` is deleted after converting
@@ -183,6 +184,7 @@ Remote reads are many small sequential requests, so their time grows with the pi
     - `--frequency A|B`: defaults to B
         - Can also be declared as `--freq`
     - `--db`
+    - `--lee [WINDOW]`: Lee speckle filter, as above
     - `--bbox MIN_LON MIN_LAT MAX_LON MAX_LAT --aoi-name NAME`: crop, required with bbox. `--h5` also accepts ASF download URLs (the `URL` column of the search CSV), which with `--bbox` reads just that area without downloading the file.
     - `--remove-h5`
     - `--out-dir`
@@ -212,6 +214,7 @@ Flags:
 - `--polarization POL [POL ...]`: `HH` and/or `HV`, one GeoTIFF per polarization (defaults to both)
     - Can also be declared as `--pol`
 - `--db`: write gamma0 in dB
+- `--lee [WINDOW]`: apply a Lee speckle filter, with an optional odd window size (default 5, i.e. 5×5). Adds `_lee<WINDOW>` to the file name. It assumes L2.2's measured speckle level, `ALOS2_LEE_ENL` (9); masked pixels are left out of the filter. See `processing/speckle.py`.
 - `--mask`: set layover, shadow and invalid pixels to NaN (also downloads each scene's `_MSK.tif`)
 - `--crop`: crops the output GeoTIFF to the AOI bbox (defaults to keeping the full scene)
 - `--crs EPSG:CODE`: reprojects the output GeoTIFF, e.g. `EPSG:4326` or `EPSG:3857` (defaults to the scene's own UTM zone). The code is added to the file name, e.g. `_epsg4326`.
@@ -244,6 +247,7 @@ How the data is fetched: JAXA's L2.2 files are Cloud-Optimized GeoTIFFs (~400 MB
     ```
     Flags:
     - `--db`
+    - `--lee [WINDOW]`: Lee speckle filter, as above
     - `--mask`: needs the scene's `_MSK.tif` (download it with `src.alos2_dl --mask`)
     - `--bbox MIN_LON MIN_LAT MAX_LON MAX_LAT --aoi-name NAME`: crop, required with bbox
     - `--remove-tif`
