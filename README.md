@@ -116,6 +116,7 @@ uv run python utils/generate_aoi_details.py
 ## Products
 `src.nisar_access` and the GeoTIFF conversion support `GSLC`, `GCOV` (default), `GUNW`, `SME2`.
 - `--db` applies to GSLC/GCOV only.
+- `--mask` applies to GSLC/GCOV only.
 - `src.asf_sar_search` will also accept `GOFF` (search only; not currently supported by the geotiff conversion).
 
 
@@ -133,6 +134,7 @@ Flags:
 - `--frequency A|B`: Frequency A products are higher resolution, but also larger files. Defaults to Frequency B.
     - Can also be declared as `--freq`
 - `--db`: applies to GSLC/GCOV only.
+- `--mask`: sets pixels that the product's own `mask` layer flags as not fully valid to NaN, and adds `_masked` to the file name; applies to GSLC/GCOV only. These pixels form strips a few km wide along the swath edges and otherwise stay in the GeoTIFF as near-zero or dimmed backscatter. This is a validity mask, not a layover/shadow mask.
 - `--crop`: crops the output GeoTIFF to the AOI bbox (defaults to keeping the full scene).
 - `--crs EPSG:CODE`: reprojects the output GeoTIFF, e.g. `EPSG:4326` or `EPSG:3857` (defaults to the scene's own CRS, usually UTM). The code is added to the file name, e.g. `_epsg4326`.
 - `--keep-h5`: by default each downloaded `.h5` is deleted after converting
@@ -176,6 +178,7 @@ Remote reads are many small sequential requests, so their time grows with the pi
     - `--frequency A|B`: defaults to B
         - Can also be declared as `--freq`
     - `--db`
+    - `--mask`: set pixels flagged as not fully valid to NaN (GSLC/GCOV only; see `--mask` above)
     - `--bbox MIN_LON MIN_LAT MAX_LON MAX_LAT --aoi-name NAME`: crop, required with bbox. `--h5` also accepts ASF download URLs (the `URL` column of the search CSV), which with `--bbox` reads just that area without downloading the file.
     - `--remove-h5`
     - `--out-dir`
