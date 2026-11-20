@@ -9,6 +9,7 @@ from rasterio.crs import CRS
 from rasterio.enums import Resampling
 from rasterio.warp import calculate_default_transform, reproject
 
+from processing.speckle import lee_filter
 from src.s1wv_dl import read_annotation
 from utils.geometry import epsg_crs
 from utils.variables import (
@@ -76,34 +77,6 @@ def interp_lut(path: Path, vector_tag: str, value_tag: str, rows, cols):
     i = np.clip(np.searchsorted(lines, rows) - 1, 0, len(lines) - 2)
     t = np.clip((rows - lines[i]) / (lines[i + 1] - lines[i]), 0, 1)[:, None]
     return along[i] * (1 - t) + along[i + 1] * t
-
-
-def box_mean(a, size: int):
-    """Mean over a size x size window centred on each pixel (edges reflected), via a summed-area table."""
-    r = size // 2
-    c = np.pad(a.astype("float64"), r, mode="reflect").cumsum(0).cumsum(1)
-    c = np.pad(c, ((1, 0), (1, 0)))
-    return (
-        c[size:, size:] - c[:-size, size:] - c[size:, :-size] + c[:-size, :-size]
-    ) / size**2
-
-
-def lee_filter(intensity, window: int, enl: float):
-    """
-    Lee speckle filter on linear intensity. Each pixel moves from its window mean towards its own value by
-    k = (local variance not explained by speckle) / (local variance), so flat sea is smoothed towards the
-    mean while edges and bright targets, where variance is well above speckle's, are mostly kept.
-    Speckle's squared coefficient of variation for intensity is 1 / ENL (equivalent number of looks).
-    """
-    cu2 = 1 / enl
-    mean = box_mean(intensity, window)
-    var = np.maximum(
-        box_mean(intensity * intensity.astype("float64"), window) - mean**2, 0
-    )
-    var_x = np.maximum((var - mean**2 * cu2) / (1 + cu2), 0)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        k = np.clip(np.where(var > 0, var_x / var, 0), 0, 1)
-    return mean + k * (intensity - mean)
 
 
 def multilook(tiff_path: Path, ann: dict):

@@ -44,6 +44,8 @@ the interpreter under `.venv`.
 # Repository Structure
 
 - `src/`: search / download / convert tools, run as modules (see NISAR Data Access, PALSAR-2 Data Access and Sentinel-1 Wave Mode (WV) Data Access)
+- `processing/`: image processing usable with any sensor's data (numpy arrays in, numpy arrays out)
+  - `speckle.py`: Lee speckle filter (used by `s1wv_convert_to_tiff --lee`); works on linear intensity and ignores NaN (no data)
 - `utils/aois.py`: private AOIs (git-ignored)
 - `utils/generate_aoi_details.py`: interactive helper that builds an AOI entry
 - `utils/setup.py`: one-time setup; creates `.env`, `utils/aois.py`, `archive/`, and the `data/` folders if missing
