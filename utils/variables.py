@@ -46,7 +46,8 @@ NISAR_GCOV_SCENE_SIZE_M = 335_000
 # Maximum number of pixels to read remotely from NISAR's ASF bucket (per polarization file)
 NISAR_REMOTE_MAX_PIXELS = 60_000_000
 
-# NISAR PROCESSING DATA (where each product's data lives inside the .h5, how to name the output, and its nodata value)
+# NISAR PROCESSING DATA (where each product's data lives inside the .h5, how to name the output, and its nodata value;
+# "mask" is the validity mask next to the data, for products whose mask has been checked)
 NISAR_PROCESSING_INFO = {
     "GSLC": {
         "grid": "/science/LSAR/GSLC/grids/frequency{frequency}",
@@ -55,6 +56,7 @@ NISAR_PROCESSING_INFO = {
         "default_polarization": "HH",  # HH or HV
         "nodata": float("nan"),
         "db_accepted": True,
+        "mask": "mask",
     },
     "GCOV": {
         "grid": "/science/LSAR/GCOV/grids/frequency{frequency}",
@@ -63,6 +65,7 @@ NISAR_PROCESSING_INFO = {
         "default_polarization": "HHHH",  # HHHH or HVHV
         "nodata": float("nan"),
         "db_accepted": True,
+        "mask": "mask",
     },
     "GUNW": {
         "grid": "/science/LSAR/GUNW/grids/frequency{frequency}/wrappedInterferogram",
@@ -81,6 +84,10 @@ NISAR_PROCESSING_INFO = {
         "db_accepted": False,
     },
 }
+# Validity mask values dropped by --mask. 0: built from partly focused or invalid radar samples (strips along the
+# swath edges, which still hold backscatter values, near zero or dimmed); 255: outside the acquisition.
+# 1 and up are valid, the number being the subswath.
+NISAR_MASK_DROP = (0, 255)
 
 # Define Test AOIs, always available
 SEARCH_AOIS = {

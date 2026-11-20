@@ -63,6 +63,7 @@ def process_scene(
                         out_dir=args.out_dir,
                         overwrite=args.overwrite,
                         dst_crs=args.crs,
+                        mask=args.mask,
                     )
                 )
             # Only reached if every polarization converted; deletes any local .h5 used (not a remote read), as before
@@ -122,6 +123,11 @@ def main() -> None:
         "--db", action="store_true", help="Write intensity in dB (GSLC/GCOV only)."
     )
     parser.add_argument(
+        "--mask",
+        action="store_true",
+        help="Set pixels the product's mask flags as not fully valid (strips along the swath edges) to NaN (GSLC/GCOV only).",
+    )
+    parser.add_argument(
         "--crop",
         action="store_true",
         help="Crop the GeoTIFF to the AOI bbox, reading only that area from ASF instead of downloading the whole .h5; by default will write the whole scene to disk.",
@@ -158,6 +164,9 @@ def main() -> None:
     args = parser.parse_args()
     if args.workers < 1:
         parser.error("--workers must be at least 1")
+    # Fail before searching rather than once per scene
+    if args.mask and "mask" not in NISAR_PROCESSING_INFO[args.product]:
+        parser.error(f"--mask is only available for GSLC/GCOV, not {args.product}")
 
     # download_scene doesn't check the token itself, so fail before searching
     if not EARTHDATA_TOKEN:

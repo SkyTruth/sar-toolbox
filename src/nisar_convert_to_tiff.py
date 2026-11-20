@@ -21,6 +21,7 @@ from utils.variables import (
     EARTHDATA_TOKEN,
     NISAR_GEOTIFF_PATH,
     NISAR_H5_PATH,
+    NISAR_MASK_DROP,
     NISAR_PROCESSING_INFO,
 )
 
@@ -133,11 +134,13 @@ def convert_scene_to_geotiff(
     out_dir: Path | str = NISAR_GEOTIFF_PATH,
     overwrite: bool = False,
     dst_crs: str | None = None,
+    mask: bool = False,
 ) -> Path:
     """
     Convert a single, specified h5 file to GeoTIFF.
     h5_path can also be an ASF download URL, read remotely without downloading the whole file
     (worthwhile with a bbox, since only the cropped area is fetched).
+    mask sets the pixels that the product's own validity mask flags as unusable to NaN (see NISAR_MASK_DROP).
     """
 
     remote = is_url(h5_path)
@@ -157,6 +160,10 @@ def convert_scene_to_geotiff(
         raise ValueError(
             f"--db is only meaningful for GSLC/GCOV, not {processing_level}"
         )
+    if mask and "mask" not in data_specs:
+        raise ValueError(
+            f"--mask is only available for GSLC/GCOV, not {processing_level}"
+        )
     names = {
         "frequency": frequency,
         "polarization": polarization or data_specs["default_polarization"],
@@ -166,6 +173,8 @@ def convert_scene_to_geotiff(
     suffix = data_specs["suffix"].format(**names)
     if db:
         suffix += "_dB"
+    if mask:
+        suffix += "_masked"
     if dst_crs:
         suffix += f"_epsg{CRS.from_user_input(dst_crs).to_epsg()}"
     if bbox:
@@ -189,6 +198,8 @@ def convert_scene_to_geotiff(
         with open_h5(h5_path) as src:
             grid = src[data_specs["grid"].format(**names)]
             data = grid[data_specs["dataset"].format(**names)]
+            # Validity mask, on the same grid as the data
+            mask_data = grid[data_specs["mask"]] if mask else None
 
             xcoords = grid["xCoordinates"][:]
             ycoords = grid["yCoordinates"][:]
@@ -243,12 +254,13 @@ def convert_scene_to_geotiff(
                 # Write in row blocks so the full array never has to fit in memory
                 for r in range(0, h, 2048):
                     n = min(2048, h - r)
-                    block = data[
-                        r_off + r : r_off + r + n, c_off : c_off + w
-                    ]  # h5py reads only this slice
-                    dst.write(
-                        to_output(block, db and not warp), 1, window=Window(0, r, w, n)
-                    )
+                    # h5py reads only these slices
+                    rows = slice(r_off + r, r_off + r + n)
+                    cols = slice(c_off, c_off + w)
+                    block = to_output(data[rows, cols], db and not warp)
+                    if mask_data is not None:
+                        block[np.isin(mask_data[rows, cols], NISAR_MASK_DROP)] = np.nan
+                    dst.write(block, 1, window=Window(0, r, w, n))
 
             if warp:
                 reproject_tif(native, part, dst_crs, db)
@@ -288,6 +300,7 @@ def convert_scenes_to_geotiff(
     out_dir: Path | str = NISAR_GEOTIFF_PATH,
     overwrite: bool = False,
     dst_crs: str | None = None,
+    mask: bool = False,
 ) -> list[Path]:
     """
     Convert a list of h5 scenes to GeoTIFF.
@@ -310,12 +323,13 @@ def convert_scenes_to_geotiff(
                     out_dir,
                     overwrite,
                     dst_crs,
+                    mask,
                 )
             )
 
         # OSError: missing/unreadable h5 or tif write failure (includes RasterioIOError)
         # KeyError: dataset path not in this h5 (e.g. wrong polarization/frequency)
-        # ValueError: unsupported processing level
+        # ValueError: unsupported processing level, or --db / --mask on a product that doesn't take it
         # IndexError: file name doesn't follow the NISAR granule naming convention
         # RuntimeError: remote read failed (e.g. 401 from an expired token, or no token), raised in open_h5
         except (OSError, KeyError, ValueError, IndexError, RuntimeError) as exc:
@@ -369,6 +383,11 @@ def main():
         "--db", action="store_true", help="Write intensity in dB (10*log10)."
     )
     parser.add_argument(
+        "--mask",
+        action="store_true",
+        help="Set pixels the product's mask flags as not fully valid (strips along the swath edges) to NaN. GSLC/GCOV only.",
+    )
+    parser.add_argument(
         "--bbox",
         nargs=4,
         type=float,
@@ -419,6 +438,7 @@ def main():
             args.out_dir,
             args.overwrite,
             args.crs,
+            args.mask,
         )
 
 
