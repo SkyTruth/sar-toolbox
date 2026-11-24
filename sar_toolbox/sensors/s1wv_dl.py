@@ -1,3 +1,5 @@
+from __future__ import annotations  # self-referencing type hints (CdseAuth) on Python < 3.14
+
 import argparse
 import json
 import math
