@@ -1,17 +1,18 @@
 """
 One-time repo setup. Run from the repo root:
 
-    uv run python -m utils.setup
+    uv run python -m sar_toolbox.utils.setup
 
 Creates any files or directories that are missing (or needed .git-ignores). Will NOT overwrite any pre-existing versions.
 - .env (copied from .env.default)
-- utils/aois.py (empty SEARCH_AOIS template)
+- sar_toolbox/utils/aois.py (empty SEARCH_AOIS template)
 - archive/, data/nisar_granule_files/, data/nisar_h5_scenes/, data/nisar_geotiffs/
 """
 
 import shutil
+from pathlib import Path
 
-from utils.variables import (
+from sar_toolbox.utils.variables import (
     ALOS2_GEOTIFF_PATH,
     ALOS2_GRANULE_CSV_PATH,
     ALOS2_TIF_PATH,
@@ -45,12 +46,12 @@ def make_env() -> None:
 
 
 def make_aois() -> None:
-    aois = REPO_ROOT / "utils" / "aois.py"
+    aois = Path(__file__).resolve().parent / "aois.py"
     if aois.exists():
-        print("exists:  utils/aois.py (left unchanged)")
+        print("exists:  sar_toolbox/utils/aois.py (left unchanged)")
     else:
         aois.write_text(AOIS_TEMPLATE)
-        print("created: utils/aois.py (add your AOIs)")
+        print("created: sar_toolbox/utils/aois.py (add your AOIs)")
 
 
 def make_dirs() -> None:

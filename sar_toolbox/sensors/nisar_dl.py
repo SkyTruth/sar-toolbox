@@ -5,7 +5,7 @@ import polars as pl
 from pyreqwest.client import SyncClientBuilder
 from pyreqwest.exceptions import RequestError
 
-from utils.variables import (
+from sar_toolbox.utils.variables import (
     EARTHDATA_TOKEN,
     GRANULE_CSV_PATH,
     NISAR_H5_PATH,

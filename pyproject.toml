@@ -26,3 +26,13 @@ dev = [
     "jupyterlab>=4.6.4",
     "ruff>=0.16.5",
 ]
+
+# hatchling packages the sar_toolbox/ folder (matched from the project name) and
+# skips anything in .gitignore, so private files like sar_toolbox/utils/aois.py stay out.
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Keep the source distribution to the package itself (no notebooks, data/, .github/)
+[tool.hatch.build.targets.sdist]
+include = ["sar_toolbox", "README.md", "LICENSE"]

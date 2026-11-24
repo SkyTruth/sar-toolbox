@@ -16,9 +16,9 @@ from rasterio.warp import transform_bounds
 from rasterio.windows import Window, from_bounds
 from rasterio.windows import transform as window_transform
 
-from processing.speckle import add_lee_argument, lee_filter_block
-from utils.geometry import epsg_crs
-from utils.variables import (
+from sar_toolbox.processing.speckle import add_lee_argument, lee_filter_block
+from sar_toolbox.utils.geometry import epsg_crs
+from sar_toolbox.utils.variables import (
     EARTHDATA_TOKEN,
     LEE_WINDOW,
     NISAR_GEOTIFF_PATH,

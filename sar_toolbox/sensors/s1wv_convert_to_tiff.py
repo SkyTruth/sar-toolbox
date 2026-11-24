@@ -9,10 +9,10 @@ from rasterio.crs import CRS
 from rasterio.enums import Resampling
 from rasterio.warp import calculate_default_transform, reproject
 
-from processing.speckle import add_lee_argument, lee_filter
-from src.s1wv_dl import read_annotation
-from utils.geometry import epsg_crs
-from utils.variables import (
+from sar_toolbox.processing.speckle import add_lee_argument, lee_filter
+from sar_toolbox.sensors.s1wv_dl import read_annotation
+from sar_toolbox.utils.geometry import epsg_crs
+from sar_toolbox.utils.variables import (
     LEE_WINDOW,
     S1_GRD_BETA0_CALIBRATION,
     S1WV_ATTRIBUTION,

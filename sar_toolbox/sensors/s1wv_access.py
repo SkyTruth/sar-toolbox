@@ -9,12 +9,12 @@ import polars as pl
 from pyreqwest.exceptions import RequestError
 from tqdm import tqdm
 
-from processing.speckle import add_lee_argument
-from src.s1wv_convert_to_tiff import convert_vignette_to_geotiff, output_path
-from src.s1wv_dl import CdseAuth, cdse_client, download_vignette, resolve_vignette
-from src.s1wv_search import construct_cdse_search
-from utils.geometry import epsg_crs
-from utils.variables import (
+from sar_toolbox.processing.speckle import add_lee_argument
+from sar_toolbox.sensors.s1wv_convert_to_tiff import convert_vignette_to_geotiff, output_path
+from sar_toolbox.sensors.s1wv_dl import CdseAuth, cdse_client, download_vignette, resolve_vignette
+from sar_toolbox.sensors.s1wv_search import construct_cdse_search
+from sar_toolbox.utils.geometry import epsg_crs
+from sar_toolbox.utils.variables import (
     CDSE_MAX_DOWNLOADS,
     LEE_WINDOW,
     S1WV_GEOTIFF_PATH,
@@ -68,7 +68,7 @@ def main() -> None:
         "--aoi",
         required=True,
         choices=sorted(SEARCH_AOIS),
-        help="Named AOI from SEARCH_AOIS in utils/variables.py.",
+        help="Named AOI from SEARCH_AOIS in sar_toolbox/utils/variables.py.",
     )
     parser.add_argument(
         "--sd", "--start", dest="start", required=True, help="Start Date: YYYY-MM-DD"

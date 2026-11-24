@@ -11,7 +11,7 @@ import polars as pl
 from pyreqwest.client import SyncClientBuilder
 from pyreqwest.exceptions import RequestError
 
-from utils.variables import (
+from sar_toolbox.utils.variables import (
     CDSE_CATALOGUE_URL,
     CDSE_DOWNLOAD_URL,
     CDSE_PASSWORD,

@@ -10,7 +10,7 @@ from pyreqwest.client import SyncClientBuilder
 from shapely.affinity import translate
 from shapely.geometry import Polygon, box, shape
 
-from utils.variables import (
+from sar_toolbox.utils.variables import (
     ALOS2_GRANULE_CSV_PATH,
     ALOS2_HH_ONLY_MODES,
     ALOS2_MODES,
@@ -232,7 +232,7 @@ def main() -> None:
     aoi_group.add_argument(
         "--aoi",
         choices=sorted(SEARCH_AOIS),
-        help=("Named AOI from SEARCH_AOIS in utils/variables.py; its bbox is used."),
+        help=("Named AOI from SEARCH_AOIS in sar_toolbox/utils/variables.py; its bbox is used."),
     )
     parser.add_argument(
         "--sd",
