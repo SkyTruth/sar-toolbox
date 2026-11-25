@@ -2355,7 +2355,7 @@ requires-dist = [
     { name = "geopandas", specifier = ">=1.2.0" },
     { name = "h5py", specifier = ">=3.16.0" },
     { name = "ipyleaflet", specifier = ">=0.20.0" },
-    { name = "polars", specifier = ">=1.44.1" },
+    { name = "polars", specifier = ">=1.44.1,<2" },
     { name = "pyreqwest", specifier = ">=0.12.4" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
     { name = "rasterio", specifier = ">=1.5.1" },
