@@ -143,3 +143,16 @@ ALOS2_PIXEL_SIZE_M = 25
 # Timed at ~24 MB/s from JAXA's bucket: remote ~1.3 s + 0.42 s per Mpx vs ~17 s download + 0.18 s per Mpx convert,
 # so they break even near 65 Mpx per file. 50 Mpx (~175 km box at 25 m) leaves margin for faster downloads.
 ALOS2_REMOTE_MAX_PIXELS = 50_000_000
+
+# CFAR DETECTION (bright targets: vessels, infrastructure)
+# False alarm rate per pixel that the detection threshold is set for
+CFAR_PFA = 1e-6
+# Window widths in meters around each pixel, converted with the GeoTIFF's pixel size. The guard window is kept out
+# of the background and should be wider than the largest target; the ring between it and the background window
+# gives the local sea clutter.
+CFAR_GUARD_M = 500
+CFAR_BACKGROUND_M = 1000
+# Pixels kept per row block, which bounds memory on full scenes (a frequency A GCOV scene is ~1,100 Mpx)
+CFAR_BLOCK_PIXELS = 8_000_000
+# More hit pixels than this means land or other non-sea clutter in the scene; the scene fails with an error
+CFAR_MAX_HIT_PIXELS = 1_000_000
