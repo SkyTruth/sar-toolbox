@@ -8,12 +8,12 @@ from pyreqwest.client import SyncClientBuilder
 from pyreqwest.exceptions import RequestError
 from tqdm import tqdm
 
-from processing.speckle import add_lee_argument
-from src.alos2_convert_to_tiff import convert_scene_to_geotiff
-from src.alos2_dl import URL_COLUMNS, download_scene, file_name
-from src.alos2_search import construct_s3_search
-from utils.geometry import crop_pixels, epsg_crs
-from utils.variables import (
+from sar_toolbox.processing.speckle import add_lee_argument
+from sar_toolbox.sensors.alos2_convert_to_tiff import convert_scene_to_geotiff
+from sar_toolbox.sensors.alos2_dl import URL_COLUMNS, download_scene, file_name
+from sar_toolbox.sensors.alos2_search import construct_s3_search
+from sar_toolbox.utils.geometry import crop_pixels, epsg_crs
+from sar_toolbox.utils.variables import (
     ALOS2_GEOTIFF_PATH,
     ALOS2_MODES,
     ALOS2_PIXEL_SIZE_M,
@@ -91,7 +91,7 @@ def main() -> None:
         "--aoi",
         required=True,
         choices=sorted(SEARCH_AOIS),
-        help="Named AOI from SEARCH_AOIS in utils/variables.py.",
+        help="Named AOI from SEARCH_AOIS in sar_toolbox/utils/variables.py.",
     )
     parser.add_argument(
         "--mode",

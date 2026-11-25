@@ -1,12 +1,12 @@
 [project]
 name = "sar-toolbox"
 version = "0.1.0"
-description = "A toolbox for searching, downloading, and accessing NISAR data."
+description = "A toolbox for searching, downloading, and accessing SAR data."
 authors = [
     {name = "SkyTruth"}
 ]
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 dependencies = [
     "aiohttp>=3.14.3",
     "earthaccess>=0.19.0",
@@ -14,7 +14,7 @@ dependencies = [
     "geopandas>=1.2.0",
     "h5py>=3.16.0",
     "ipyleaflet>=0.20.0",
-    "polars>=1.44.1",
+    "polars>=1.44.1,<2",
     "pyreqwest>=0.12.4",
     "python-dotenv>=1.2.3",
     "rasterio>=1.5.1",
@@ -26,3 +26,13 @@ dev = [
     "jupyterlab>=4.6.4",
     "ruff>=0.16.5",
 ]
+
+# hatchling packages the sar_toolbox/ folder (matched from the project name) and
+# skips anything in .gitignore, so private files like sar_toolbox/utils/aois.py stay out.
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Keep the source distribution to the package itself (no notebooks, data/, .github/)
+[tool.hatch.build.targets.sdist]
+include = ["sar_toolbox", "README.md", "LICENSE"]

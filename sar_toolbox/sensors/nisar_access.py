@@ -8,12 +8,12 @@ from pyreqwest.client import SyncClientBuilder
 from pyreqwest.exceptions import RequestError
 from tqdm import tqdm
 
-from processing.speckle import add_lee_argument
-from src.asf_sar_search import construct_api_search
-from src.nisar_convert_to_tiff import convert_scene_to_geotiff
-from src.nisar_dl import download_scene
-from utils.geometry import crop_pixels, epsg_crs
-from utils.variables import (
+from sar_toolbox.processing.speckle import add_lee_argument
+from sar_toolbox.sensors.asf_sar_search import construct_api_search
+from sar_toolbox.sensors.nisar_convert_to_tiff import convert_scene_to_geotiff
+from sar_toolbox.sensors.nisar_dl import download_scene
+from sar_toolbox.utils.geometry import crop_pixels, epsg_crs
+from sar_toolbox.utils.variables import (
     ASF_DEFAULT_PROCESSING_LEVEL,
     EARTHDATA_TOKEN,
     LEE_WINDOW,
@@ -93,7 +93,7 @@ def main() -> None:
         "--aoi",
         required=True,
         choices=sorted(SEARCH_AOIS),
-        help="Named AOI from SEARCH_AOIS in utils/variables.py.",
+        help="Named AOI from SEARCH_AOIS in sar_toolbox/utils/variables.py.",
     )
     parser.add_argument(
         "--product",

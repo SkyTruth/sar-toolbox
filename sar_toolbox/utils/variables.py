@@ -5,7 +5,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load variables from the .env file
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 # TOKEN FOR EARTH DATA LOGIN
 EARTHDATA_TOKEN = os.getenv("EARTHDATA_TOKEN")
@@ -27,7 +27,7 @@ LEE_WINDOW = 5
 REQUEST_DATE = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
 
 # REPO STRUCTURE
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 ARCHIVE_PATH = REPO_ROOT / "archive"
 DATA_DIRECTORY = REPO_ROOT / "data"
 GRANULE_CSV_PATH = DATA_DIRECTORY / "nisar_granule_files"
@@ -102,9 +102,9 @@ SEARCH_AOIS = {
     "s1wv-timor-sea-test-area": {"point": "116.596,-12.772", "buffer_km": 10},
 }
 
-# Import AOIs from git-ignored file (utils/aois.py); same names override the test ones
+# Import AOIs from git-ignored file (sar_toolbox/utils/aois.py); same names override the test ones
 try:
-    from utils.aois import SEARCH_AOIS as LOCAL_AOIS
+    from sar_toolbox.utils.aois import SEARCH_AOIS as LOCAL_AOIS
 
     SEARCH_AOIS |= LOCAL_AOIS
 except ImportError:
@@ -113,7 +113,7 @@ except ImportError:
 # AOIs given as "point" (lon,lat) + "buffer_km" get their bbox from the point; it takes precedence over any "bbox"
 if any("point" in aoi for aoi in SEARCH_AOIS.values()):
     # geopandas is slow to import, so only load it when an AOI needs it
-    from utils.generate_aoi_details import point_to_bbox
+    from sar_toolbox.utils.generate_aoi_details import point_to_bbox
 
     for name, aoi in SEARCH_AOIS.items():
         if "point" in aoi:

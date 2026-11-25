@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 import polars as pl
 
-from utils.variables import (
+from sar_toolbox.utils.variables import (
     ASF_API_BASE,
     ASF_DATA_MATURITY,
     ASF_DATASET,
@@ -82,7 +82,7 @@ def main() -> None:
     aoi_group.add_argument(
         "--aoi",
         choices=sorted(SEARCH_AOIS),
-        help=("Named AOI from SEARCH_AOIS in utils/variables.py; its bbox is used."),
+        help=("Named AOI from SEARCH_AOIS in sar_toolbox/utils/variables.py; its bbox is used."),
     )
     parser.add_argument(
         "--sd",

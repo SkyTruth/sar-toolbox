@@ -1,7 +1,7 @@
 import geopandas as gpd
 from shapely.geometry import Point
 
-# Generate an AOI in the format accepted by SEARCH_AOIS (utils/aois.py)
+# Generate an AOI in the format accepted by SEARCH_AOIS (sar_toolbox/utils/aois.py)
 
 
 def point_to_bbox(lon: float, lat: float, buffer_km: float) -> str:
@@ -45,7 +45,7 @@ def main() -> None:
     else:
         aoi = define_aoi_from_bounds()
 
-    print("\nAdd this to SEARCH_AOIS in utils/aois.py:\n")
+    print("\nAdd this to SEARCH_AOIS in sar_toolbox/utils/aois.py:\n")
     if "point" in aoi:
         print(
             f'    "{aoi_name}": {{"point": "{aoi["point"]}", "buffer_km": {aoi["buffer_km"]:g}}},  # lon, lat'

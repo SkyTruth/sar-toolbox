@@ -37,4 +37,4 @@ data/*
 archive/
 
 # Private AOI data, in case you don't want them shared
-utils/aois.py
+sar_toolbox/utils/aois.py
